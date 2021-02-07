@@ -1,0 +1,18 @@
+{
+	"compilerOptions": {
+		"moduleResolution": "node",
+		"module": "commonjs",
+		"lib": [ "es6", "dom" ],
+		"target": "es6",
+		"sourceMap": true,
+		"alwaysStrict": true,
+		"jsx": "react",
+		"allowJs": false,
+		"baseUrl": ".",
+		"strictNullChecks": true,
+		"strictPropertyInitialization": false,
+		"experimentalDecorators": true
+	},
+	"exclude": [ "node_modules", "types", "dist" ],
+	"compileOnSave": false
+}

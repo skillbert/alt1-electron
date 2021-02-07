@@ -1,0 +1,108 @@
+//this import also imports global namespace alt1 passively...
+import type * as alt1types from "@alt1/base";
+import type { RsInfo } from "../native";
+import type * as lib from "../lib";
+
+import { ipcRenderer } from "electron";
+
+
+
+let warningsTriggered: string[] = [];
+function warn(key: string, message: string) {
+	if (!warningsTriggered.includes(key)) {
+		console.warn(message);
+		warningsTriggered.push(key);
+	}
+}
+
+type FlatImageData = { data: Uint8ClampedArray, width: number, height: number };
+function captureSync(x: number, y: number, w: number, h: number) {
+	warn("captsync", "Synchonous capture is depricated");
+	let info = getRsInfo();
+	x -= info.x;
+	y -= info.y;
+	let img: lib.SyncResponse<FlatImageData> = ipcRenderer.sendSync("capture", x, y, w, h);
+	if (img.error != undefined) { throw new Error(img.error); }
+	return img.value;
+}
+
+function imagedataToBase64(img: FlatImageData) {
+	warn("base64capt", "This capture api is a backward port for compatibylity and is much slower");
+	const btoachars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	let str = "";
+	let data = img.data;
+	//3 bytes -> 4 chars repeating pattern
+	for (var a = 0; a + 3 < data.length; a += 3) {
+		let b1 = data[a + 0], b2 = data[a + 1], b3 = data[a + 2];
+		str += btoachars[(b1 >> 2) & 0x3f] + btoachars[((b1 << 4) | (b2 >> 4)) & 0x3f] + btoachars[((b2 << 2) | (b3 >> 6)) & 0x3f] + btoachars[(b3) & 0x3f];
+	}
+	//use naive approach for left over bytes and let native btoa deal with ending bytes
+	let endstr = "";
+	for (; a < img.data.length; a++) {
+		endstr += String.fromCharCode(data[a]);
+	}
+	str += btoa(endstr);
+	return str;
+}
+
+let lastRsInfo: lib.SyncResponse<RsInfo> = null!;
+let lastRsInfoTime = 0;
+function getRsInfo() {
+	let info = lastRsInfo;
+	if (lastRsInfoTime < Date.now() - 500) {
+		info = ipcRenderer.sendSync("rsinfo");
+		lastRsInfo = info;
+		lastRsInfoTime = Date.now();
+	}
+	if (info.error != undefined) { throw new Error(info.error); }
+	return info.value;
+}
+
+let boundImage: FlatImageData & { x: number, y: number } | null = null;
+
+var alt1api: Partial<typeof alt1> = {
+	identifyAppUrl: (url) => ipcRenderer.send("identifyapp", url),
+	captureInterval: 100,
+	maxtransfer: 10000000,
+	openInfo: '{"openMethod":"systray"}',
+	skinName: "default",
+	version: "1.3.0",
+	versionint: 1003000,
+	openBrowser: (url) => { window.open(url, "_blank"); return true; },
+	getRegion: (x, y, w, h) => {
+		let img = captureSync(x, y, w, h);
+		return imagedataToBase64(img);
+	},
+	bindRegion(x, y, w, h) {
+		warn("bindbypass", "This platform does not utilise the bound image pattern, bound images are the same speed as normal capture");
+		boundImage = { x, y, ...captureSync(x, y, w, h) };
+		return 1;
+	},
+	bindGetPixel(id, x, y) {
+		//TODO double check if this is implemented as error or not
+		if (!boundImage || id != 1) { return 0; }
+		let i = boundImage.width * 4 * y + 4 * x;
+		let r = boundImage.data[i + 0], g = boundImage.data[i + 1], b = boundImage.data[i + 2], a = boundImage.data[i + 3];
+		return (r << 24) | (g << 16) | (b << 8) | a;
+	},
+	bindGetRegion(id, x, y, w, h) {
+		//TODO double check if this is implemented as error or not
+		if (!boundImage || id != 1) { return ""; }
+		let newdata = new Uint8ClampedArray(w * h * 4);
+		let data = boundImage.data;
+		for (let dy = 0; dy < h; dy++) {
+			let i = x * 4 + (y + dy) * 4 * boundImage.width;
+			newdata.set(data.subarray(i, i + w * 4), dy * 4 * w);
+		}
+		return imagedataToBase64({ data: newdata, width: w, height: h });
+	},
+};
+
+Object.defineProperties(alt1api, {
+	rsX: { get() { return getRsInfo()?.x || 0; } },
+	rsY: { get() { return getRsInfo()?.y || 0; } },
+	rsWidth: { get() { return getRsInfo()?.width || 0; } },
+	rsHeight: { get() { return getRsInfo()?.height || 0; } },
+});
+
+(window as any).alt1 = alt1api;

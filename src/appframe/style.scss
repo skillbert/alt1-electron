@@ -1,0 +1,75 @@
+body {
+	overflow: hidden;
+}
+
+.approot {
+	position: absolute;
+	top: 0px;
+	left: 0px;
+	bottom: 0px;
+	right: 0px;
+	display: grid;
+	grid-template-columns: 8px auto 8px;
+	grid-template-rows: 8px auto 8px;
+}
+
+.appframe {
+	grid-row: 2;
+	grid-column: 2;
+	min-width: 0;
+	min-height: 0;
+}
+
+.buttonroot {
+	position: absolute;
+	top: 0px;
+	right: 0px;
+}
+.button {
+	background-position: 0px 0px;
+	width: 14px;
+	height: 14px;
+	cursor: pointer;
+	float: right;
+	background: black;
+	border: 1px solid red;
+	box-sizing: border-box;
+
+	&:hover {
+		background-position: 0px 50%;
+	}
+}
+.dragbutton {
+	float: right;
+	background: black;
+	cursor: move;
+	border: 1px solid red;
+	box-sizing: border-box;
+	width: 30px;
+	height: 12px;
+}
+
+.border {
+	background: black;
+	border: 1px solid red;
+	&-left,
+	&-right {
+		cursor: ew-resize;
+	}
+	&-top,
+	&-bot {
+		cursor: ns-resize;
+	}
+	&-topleft {
+		cursor: nwse-resize;
+	}
+	&-topright {
+		cursor: nesw-resize;
+	}
+	&-botleft {
+		cursor: nesw-resize;
+	}
+	&-botright {
+		cursor: nwse-resize;
+	}
+}

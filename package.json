@@ -1,0 +1,47 @@
+{
+  "name": "alt1lite",
+  "version": "0.0.1",
+  "description": "Lightweight cross-platform client for Alt1 Toolkit apps",
+  "main": "index.ts",
+  "scripts": {
+    "build": "node -r ts-node/register ./node_modules/webpack/bin/webpack.js --esnext --nougly",
+    "release": "npm run build -- -p",
+    "watch": "npm run build -- --watch",
+    "ui": "electron --inspect=9228 ./dist/alt1lite.bundle.js",
+    "uibuild": "electron-rebuild -f alt1lite"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@alt1/font-loader": "0.0.10",
+    "@alt1/imagedata-loader": "0.0.10",
+    "@alt1/webpack": "0.0.10",
+    "@types/classnames": "^2.2.11",
+    "@types/node-fetch": "^2.5.8",
+    "@types/react": "^17.0.0",
+    "@types/react-dom": "^17.0.0",
+    "asar": "^3.0.3",
+    "css-loader": "^5.0.1",
+    "electron-rebuild": "^2.3.4",
+    "file-loader": "^6.2.0",
+    "nan": "^2.14.2",
+    "node-addon-api": "^3.1.0",
+    "node-sass": "^5.0.0",
+    "sass-loader": "^10.1.1",
+    "style-loader": "^2.0.0",
+    "ts-loader": "^8.0.14",
+    "ts-node": "^9.1.1",
+    "typescript": "^4.1.3",
+    "webpack": "^4.41.5",
+    "webpack-cli": "^3.3.11"
+  },
+  "dependencies": {
+    "@alt1/base": "0.0.10",
+    "@alt1/ocr": "0.0.10",
+    "classnames": "^2.2.6",
+    "electron": "^11.2.1",
+    "node-fetch": "^2.6.1",
+    "react": "^17.0.1",
+    "react-dom": "^17.0.1"
+  }
+}
