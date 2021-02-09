@@ -7,18 +7,15 @@ import classnames from "classnames";
 
 import "./style.scss";
 import "./index.html";
-import { InstalledApp } from "../appconfig";
 
-var wnd = remote.getCurrentWindow();
+(window as any).remote = remote;
 var appview: WebviewTag | null = null;
 var appcontents: WebContents | null = null;
-var pageconfig: InstalledApp = null!;
+var mainmodule = remote.getGlobal("Alt1lite") as typeof import("../main");
+//TODO backup if this fails
+var thiswindow = mainmodule.getManagedWindow(remote.getCurrentWebContents())!;
 
-Promise.all([
-	ipcRenderer.invoke("whoami"),
-	new Promise(done => window.addEventListener("DOMContentLoaded", done))
-]).then(([appconfig]) => {
-	pageconfig = appconfig;
+window.addEventListener("DOMContentLoaded", () => {
 	render(<AppFrame />, document.getElementById("root"));
 });
 
@@ -33,9 +30,13 @@ function AppFrame(p: {}) {
 		view.allowpopups = true;
 		view.nodeintegration = false;
 		view.nodeintegrationinsubframes = false;
-		view.src = pageconfig.appUrl;
+		view.src = thiswindow.appConfig.appUrl;
 		view.webpreferences = "nativeWindowOpen,sandbox";
 		el.current.appendChild(view);
+		view.addEventListener("dom-ready", e => {
+			//TODO is there a better way to get a ref to the frame?
+			thiswindow.appFrameId = view.getWebContentsId();
+		});
 
 		appview = view;
 		view.addEventListener("dom-ready", () => {
@@ -97,8 +98,7 @@ function borderDrag(ver: "top" | "bot" | "", hor: "left" | "right" | "") {
 
 function startDrag(factors: { x: number, y: number, w: number, h: number }) {
 	return function startDrag(starte: React.MouseEvent) {
-		let initialsize = wnd.getSize();
-		let initialpos = wnd.getPosition();
+		let initial = thiswindow.nativeWindow.getBounds();
 		starte.preventDefault();
 		starte.stopPropagation();
 		appview!.style.pointerEvents = "none";
@@ -107,12 +107,8 @@ function startDrag(factors: { x: number, y: number, w: number, h: number }) {
 			let pos = remote.screen.getCursorScreenPoint();
 			let dx = pos.x - startpos.x;
 			let dy = pos.y - startpos.y;
-			if (factors.x || factors.y) {
-				wnd.setPosition(initialpos[0] + dx * factors.x, initialpos[1] + dy * factors.y);
-			}
-			if (factors.w || factors.h) {
-				wnd.setSize(initialsize[0] + dx * factors.w, initialsize[1] + dy * factors.h);
-			}
+			thiswindow.nativeWindow.setBounds(initial.x + dx * factors.x, initial.y + dy * factors.y, initial.width + dx * factors.w, initial.height + dy * factors.h);
+			thiswindow.windowPin.updatePinAnchor();
 		};
 		let cleanup = () => {
 			window.removeEventListener("mousemove", moved);

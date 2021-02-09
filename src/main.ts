@@ -2,27 +2,40 @@ import { app, BrowserWindow, globalShortcut, ipcMain, WebContents } from "electr
 import * as electron from "electron";
 import * as path from "path";
 import fetch from "node-fetch";
-import { dialog, Menu, MenuItem, Tray } from "electron/main";
+import { BrowserView, dialog, Menu, MenuItem, Tray, webContents } from "electron/main";
 import { MenuItemConstructorOptions, nativeImage } from "electron/common";
 import { handleSchemeArgs, handleSchemeCommand } from "./schemehandler";
-import { readJsonWithBOM, relPath, sameDomainResolve, schemestring, UserError, weborigin } from "./lib";
+import { readJsonWithBOM, relPath, rsClientExe, sameDomainResolve, schemestring, UserError, weborigin } from "./lib";
 import { InstalledApp, identifyApp } from "./appconfig";
-import { captureDesktop, getProcessMainWindow, getProcessesByName, getWindowMeta, setPinParent, OSWindow } from "./native";
+import { captureDesktop, getProcessMainWindow, getProcessesByName, OSWindow, OSWindowPin, captureDesktopMulti } from "./native";
+import { detectInstances, RsInstance, rsInstances } from "./rsinstance";
+import { OverlayCommand, Rectangle } from "./shared";
 
 (global as any).native = require("./native");
+(global as any).Alt1lite = require("./main");
+
+export const installedApps: InstalledApp[] = [];
+export const managedWindows: ManagedWindow[] = [];
+export function getManagedWindow(w: webContents) { return managedWindows.find(q => q.window.webContents == w); }
+export function getManagedAppWindow(id: number) { return managedWindows.find(q => q.appFrameId == id); }
+var tray: Tray | null = null;
+var alt1icon = nativeImage.createFromPath(relPath(require("!file-loader!./imgs/alt1icon.png").default));
+
 
 //TODO this is needed for current native module, need to make it context aware
-app.allowRendererProcessReuse = false;
+//app.allowRendererProcessReuse = false;
 if (!app.requestSingleInstanceLock()) { app.exit(); }
 app.setAsDefaultProtocolClient(schemestring, undefined, [__non_webpack_require__.main!.filename]);
 handleSchemeArgs(process.argv);
+
 app.on("second-instance", (e, argv, cwd) => handleSchemeArgs(argv));
 app.on('window-all-closed', e => e.preventDefault());
 app.once('ready', () => {
 
+	//TODO only do this on config reset
 	fetch(`${weborigin}/data/alt1/defaultapps.json`).then(r => readJsonWithBOM(r)).then(async (r: { folder: string, name: string, url: string }[]) => {
 		for (let appbase of r) { await identifyApp(new URL(`${weborigin}${appbase.url}`)); }
-		let stats = installedApps.find(a => a.configUrl == "http://localhost/apps/alt1/notepad/appconfig.json")!;
+		let stats = installedApps.find(a => a.configUrl == "http://localhost/apps/clue/appconfig.json")!;
 		openApp(stats);
 	});
 
@@ -32,38 +45,40 @@ app.once('ready', () => {
 	initIpcApi();
 });
 
-type ActiveWnd = {
-	appConfig: InstalledApp,
-	webContents: WebContents,
-	window: BrowserWindow
-}
-
-export var installedApps: InstalledApp[] = [];
-let iconpath = relPath(require("!file-loader!./imgs/alt1icon.png").default);
-console.log(iconpath);
-console.log(path.resolve(iconpath));
-var alt1icon = nativeImage.createFromPath(iconpath);
-var wins: ActiveWnd[] = [];
-var tray: Tray | null = null;
-
 export function openApp(app: InstalledApp) {
-	var wnd = new BrowserWindow({
-		webPreferences: { nodeIntegration: true, webviewTag: true, enableRemoteModule: true },
-		frame: false,
-		//alwaysOnTop: true,
-		width: app.defaultWidth,
-		height: app.defaultHeight
-	});
-	let winentry: ActiveWnd = { window: wnd, appConfig: app, webContents: wnd.webContents };
+	new ManagedWindow(app);
+}
+class ManagedWindow {
+	appConfig: InstalledApp;
+	window: BrowserWindow;
+	nativeWindow: OSWindow;
+	windowPin: OSWindowPin;
+	rsClient: RsInstance;
+	appFrameId = -1;
 
-	let rswnd = getProcessMainWindow(getProcessesByName("rs2client.exe")[0]);
+	constructor(app: InstalledApp) {
+		this.window = new BrowserWindow({
+			webPreferences: { nodeIntegration: true, webviewTag: true, enableRemoteModule: true },
+			frame: false,
+			//alwaysOnTop: true,
+			width: app.defaultWidth,
+			height: app.defaultHeight
+		});
 
-	setPinParent(wnd.getNativeWindowHandle(), rswnd);
-	wnd.loadFile(path.resolve(__dirname, "appframe/index.html"));
-	//wnd.webContents.openDevTools();
-	wnd.once("close", () => { wins = wins.filter(w => w != winentry) });
+		detectInstances();
+		this.rsClient = rsInstances[0];
+		this.appConfig = app;
 
-	wins.push(winentry);
+		this.nativeWindow = new OSWindow(this.window.getNativeWindowHandle());
+		this.windowPin = this.nativeWindow.setPinParent(this.rsClient.window);
+		this.window.loadFile(path.resolve(__dirname, "appframe/index.html"));
+		this.window.webContents.openDevTools();
+		this.window.once("close", () => {
+			managedWindows.splice(managedWindows.indexOf(this), 1);
+		});
+
+		managedWindows.push(this);
+	}
 }
 
 function drawTray() {
@@ -112,25 +127,47 @@ function initIpcApi() {
 		}
 	});
 
-	ipcMain.on("capture", (e, x, y, w, h) => {
+	ipcMain.on("capturesync", (e, x, y, w, h) => {
 		try {
-			e.returnValue = { value: { width: w, height: h, data: captureDesktop(x, y, w, h) } };
+			let wnd = getManagedAppWindow(e.sender.id);
+			if (!wnd?.rsClient.window) { throw new Error("capture window not found"); }
+			let bounds = wnd.rsClient.window.getClientBounds();
+			e.returnValue = { value: { width: w, height: h, data: captureDesktop(x - bounds.x, y - bounds.y, w, h) } };
 		} catch (err) {
 			e.returnValue = { error: "" + err };
 		}
 	});
 
-	ipcMain.on("rsinfo", (e) => {
-		let [pid] = getProcessesByName("rs2client.exe");
-		if (!pid) {
-			e.returnValue = { value: null };
-		} else {
-			e.returnValue = { value: getWindowMeta(getProcessMainWindow(pid)) };
-		}
+	//TODO remove
+	ipcMain.handle("test", (e, buf) => { return buf; });
+
+	ipcMain.on("rsbounds", (e) => {
+		let wnd = getManagedAppWindow(e.sender.id);
+		e.returnValue = { value: wnd?.rsClient.window.getClientBounds() };
 	});
 
-	ipcMain.handle("whoami", (e) => {
-		let wnd = wins.find(q => q.webContents == e.sender);
-		return wnd?.appConfig;
+	ipcMain.handle("capture", (e, x, y, w, h) => {
+		let wnd = getManagedAppWindow(e.sender.id);
+		if (!wnd?.rsClient.window) { throw new Error("capture window not found"); }
+		let bounds = wnd.rsClient.window.getClientBounds();
+		return captureDesktop(x - bounds.x, y - bounds.y, w, h);
+	});
+
+	ipcMain.handle("capturemulti", (e, rects: { [key: string]: Rectangle }) => {
+		let wnd = getManagedAppWindow(e.sender.id);;
+		if (!wnd?.rsClient.window) { throw new Error("capture window not found"); }
+		let bounds = wnd.rsClient.window.getClientBounds();
+		for (let a in rects) {
+			if (!rects[a]) { continue; }
+			rects[a].x -= bounds.x;
+			rects[a].y -= bounds.y;
+		}
+		return captureDesktopMulti(rects);
+	});
+
+	ipcMain.on("overlay", (e, commands: OverlayCommand[]) => {
+		let wnd = getManagedAppWindow(e.sender.id);
+		if (!wnd?.rsClient.window) { throw new Error("capture window not found"); }
+		wnd.rsClient.overlayCommands(wnd.appFrameId, commands);
 	});
 }

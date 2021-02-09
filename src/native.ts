@@ -1,8 +1,19 @@
 import * as path from "path";
 import * as fs from "fs";
+import { Rectangle } from "./shared";
 
-export type RsInfo = { x: number, y: number, width: number, height: number, title: string };
-export type OSWindow = Uint8Array;
+export type OSWindow = {
+	getTitle(): string
+	setBounds(x: number, y: number, w: number, h: number): void
+	getBounds(): Rectangle
+	getClientBounds(): Rectangle
+	setPinParent(parent: OSWindow): OSWindowPin
+	equals(other: OSWindow): boolean
+};
+export type OSWindowPin = {
+	unpin(): void
+	updatePinAnchor(): void
+}
 
 
 //Copy the addon file so we can rebuild while alt1lite is already running
@@ -13,12 +24,12 @@ fs.copyFileSync(origfile, tmpfile);
 
 
 var alt1native = __non_webpack_require__(tmpfile) as {
-	captureDesktop: (x: number, y: number, w: number, h: number) => Uint8ClampedArray
-	getWindowMeta: (hwnd: OSWindow) => { x: number, y: number, width: number, height: number }
-	getProcessesByName: (name: string) => number[]
+	captureDesktop: (x: number, y: number, w: number, h: number) => Uint8ClampedArray,
+	captureDesktopMulti: <T extends { [key: string]: Rectangle | undefined | null }>(rect: T) => { [key in keyof T]: Uint8ClampedArray },
 	getProcessMainWindow: (pid: number) => OSWindow,
-	setPinParent: (window: OSWindow, newparent: OSWindow) => void
+	getProcessesByName: (name: string) => number[],
+	OSWindow: new (handle: Uint8Array) => OSWindow
 }
 
-export const { getProcessMainWindow, captureDesktop, getProcessesByName, getWindowMeta, setPinParent } = alt1native;
+export const { getProcessMainWindow, captureDesktopMulti, captureDesktop, getProcessesByName, OSWindow } = alt1native;
 

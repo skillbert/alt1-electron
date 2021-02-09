@@ -9,10 +9,10 @@ declare global {
 export class UserError extends Error { }
 
 
+//export const rsClientExe = "notepad++.exe";
+export const rsClientExe = "rs2client.exe";
 export const schemestring = "alt1lite";
 export const weborigin = "http://localhost";
-
-export type SyncResponse<T> = { error: string } | { error: undefined, value: T };
 
 //needed because node-fetch tries to be correct by choking on BOM
 export async function readJsonWithBOM(res: { text(): Promise<string> }) {

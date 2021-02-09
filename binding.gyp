@@ -1,12 +1,14 @@
 {
   "targets": [
     {
-      "include_dirs" : [
-        "<!(node -e \"require('nan')\")",
-      ],
       "target_name": "addon",
-      "sources": [ "native/lib.cc"],
-      "defines": [ "_UNICODE", "UNICODE" ]
+      "cflags!": [ "-fno-exceptions" ],
+      "cflags_cc!": [ "-fno-exceptions" ],
+      "sources": [ "./native/lib.cc" ],
+      "include_dirs": [
+        "<!@(node -p \"require('node-addon-api').include\")"
+      ],
+      'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS' ],
     }
   ]
 }

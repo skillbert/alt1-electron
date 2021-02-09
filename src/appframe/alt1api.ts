@@ -1,11 +1,7 @@
 //this import also imports global namespace alt1 passively...
 import type * as alt1types from "@alt1/base";
-import type { RsInfo } from "../native";
-import type * as lib from "../lib";
-
 import { ipcRenderer } from "electron";
-
-
+import { FlatImageData, SyncResponse, Rectangle, OverlayCommand, OverlayPrimitive } from "../shared";
 
 let warningsTriggered: string[] = [];
 function warn(key: string, message: string) {
@@ -15,13 +11,9 @@ function warn(key: string, message: string) {
 	}
 }
 
-type FlatImageData = { data: Uint8ClampedArray, width: number, height: number };
 function captureSync(x: number, y: number, w: number, h: number) {
 	warn("captsync", "Synchonous capture is depricated");
-	let info = getRsInfo();
-	x -= info.x;
-	y -= info.y;
-	let img: lib.SyncResponse<FlatImageData> = ipcRenderer.sendSync("capture", x, y, w, h);
+	let img: SyncResponse<FlatImageData> = ipcRenderer.sendSync("capturesync", x, y, w, h);
 	if (img.error != undefined) { throw new Error(img.error); }
 	return img.value;
 }
@@ -45,12 +37,12 @@ function imagedataToBase64(img: FlatImageData) {
 	return str;
 }
 
-let lastRsInfo: lib.SyncResponse<RsInfo> = null!;
+let lastRsInfo: SyncResponse<Rectangle> = null!;
 let lastRsInfoTime = 0;
 function getRsInfo() {
 	let info = lastRsInfo;
 	if (lastRsInfoTime < Date.now() - 500) {
-		info = ipcRenderer.sendSync("rsinfo");
+		info = ipcRenderer.sendSync("rsbounds");
 		lastRsInfo = info;
 		lastRsInfoTime = Date.now();
 	}
@@ -59,14 +51,35 @@ function getRsInfo() {
 }
 
 let boundImage: FlatImageData & { x: number, y: number } | null = null;
+let overlayDebounceCommands: OverlayCommand[] = [];
+let overlayDebounced = false;
+function queueOverlayCommand(command: OverlayCommand) {
+	overlayDebounceCommands.push(command);
+	if (!overlayDebounced) {
+		setImmediate(sendOverlayQueue);
+		overlayDebounced = true;
+	}
+}
+function sendOverlayQueue() {
+	ipcRenderer.send("overlay", overlayDebounceCommands)
+	overlayDebounced = false;
+	overlayDebounceCommands = [];
+}
 
+//TODO remove
+(window as any).invoke = (ch: string, ...args: any[]) => {
+	return ipcRenderer.invoke(ch, ...args);
+}
+
+//TODO use contextBridge.exposeInMainWorld
 var alt1api: Partial<typeof alt1> = {
+
 	identifyAppUrl: (url) => ipcRenderer.send("identifyapp", url),
 	captureInterval: 100,
 	maxtransfer: 10000000,
 	openInfo: '{"openMethod":"systray"}',
 	skinName: "default",
-	version: "1.3.0",
+	version: "1.3.0",//old-ish version because of missing apis
 	versionint: 1003000,
 	openBrowser: (url) => { window.open(url, "_blank"); return true; },
 	getRegion: (x, y, w, h) => {
@@ -88,15 +101,60 @@ var alt1api: Partial<typeof alt1> = {
 	bindGetRegion(id, x, y, w, h) {
 		//TODO double check if this is implemented as error or not
 		if (!boundImage || id != 1) { return ""; }
-		let newdata = new Uint8ClampedArray(w * h * 4);
-		let data = boundImage.data;
-		for (let dy = 0; dy < h; dy++) {
-			let i = x * 4 + (y + dy) * 4 * boundImage.width;
-			newdata.set(data.subarray(i, i + w * 4), dy * 4 * w);
-		}
-		return imagedataToBase64({ data: newdata, width: w, height: h });
+		return imagedataToBase64(subImageData(boundImage, x, y, w, h));
 	},
+	capture(x, y, width, height) {
+		return captureSync(x, y, width, height).data;
+	},
+	async captureAsync(x, y, width, height) {
+		let r = await ipcRenderer.invoke("capture", x, y, width, height);
+		return r;
+	},
+	async captureMultiAsync(areas) {
+		let r = await ipcRenderer.invoke("capturemulti", areas);
+		return r;
+	},
+	bindGetRegionBuffer(id, x, y, w, h) {
+		if (!boundImage || id != 1) { throw new Error("no bound image"); }
+		return subImageData(boundImage, x, y, w, h).data;
+	},
+
+	overLayLine(color, linewidth, x1, y1, x2, y2, time) {
+		queueOverlayCommand({ command: "draw", time, action: { type: "line", x1, y1, x2, y2, color, linewidth } });
+		return true;
+	},
+	overLayRect(color, x, y, width, height, time, linewidth) {
+		queueOverlayCommand({ command: "draw", time, action: { type: "rect", x, y, width, height, color, linewidth } });
+		return true;
+	},
+	overLayTextEx(text, color, size, x, y, time, font, center, shadow) {
+		queueOverlayCommand({ command: "draw", time, action: { type: "text", x, y, font, text, center, shadow, color, size } });
+		return true;
+	},
+	overLayText(text, color, size, x, y, time) {
+		return alt1.overLayTextEx(text, color, size, x, y, time, "", false, true);
+	},
+	overLayImage(x, y, imgstr, imgwidth, time) {
+		throw new Error("not implemented");
+	},
+	overLaySetGroup(groupid: string) { queueOverlayCommand({ command: "setgroup", groupid }); },
+	overLaySetGroupZIndex(groupid: string, zindex: number) { queueOverlayCommand({ command: "setgroupzindex", groupid, zindex }); },
+	overLayFreezeGroup(groupid) { queueOverlayCommand({ command: "freezegroup", groupid }); },
+	overLayContinueGroup(groupid) { queueOverlayCommand({ command: "continuegroup", groupid }); },
+	overLayClearGroup(groupid) { queueOverlayCommand({ command: "cleargroup", groupid }); },
+	overLayRefreshGroup(groupid) { queueOverlayCommand({ command: "refreshgroup", groupid }); }
 };
+
+function subImageData(img: FlatImageData, x: number, y: number, w: number, h: number) {
+	let newdata = new Uint8ClampedArray(w * h * 4);
+	let data = img.data;
+	let imgwidth = img.width;
+	for (let dy = 0; dy < h; dy++) {
+		let i = x * 4 + (y + dy) * 4 * imgwidth;
+		newdata.set(data.subarray(i, i + w * 4), dy * 4 * w);
+	}
+	return { data: newdata, width: w, height: h } as FlatImageData;
+}
 
 Object.defineProperties(alt1api, {
 	rsX: { get() { return getRsInfo()?.x || 0; } },

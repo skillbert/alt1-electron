@@ -5,17 +5,15 @@
 
 vector<DWORD> OSGetProcessesByName(std::wstring name, DWORD parentpid);
 
-HWND OSFindMainWindow(unsigned long process_id);
+OSWindow OSFindMainWindow(unsigned long process_id);
 
 void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h);
 
-bool OSIsWindow(OSWindow wnd);
-
-JSRectangle OSGetWindowBounds(OSWindow wnd);
-
-string OSGetWindowTitle(OSWindow wnd);
-
-void OSSetWindowBounds(OSWindow wnd, JSRectangle bounds);
+struct CaptureRect {
+	JSRectangle rect;
+	void* data;
+	size_t size;
+};
 
 enum WindowDragPhase { Start, Moving, End };
 

@@ -6,31 +6,47 @@
 
 #include "os.h"
 
-JSRectangle OSGetWindowBounds(OSWindow wnd) {
-	RECT rect;
-	if (!GetWindowRect(wnd.GetHwnd(), &rect)) {
-		return MakeJSRect(0, 0, 0, 0);
-	}
-	return MakeJSRect(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
+void OSWindow::SetBounds(JSRectangle bounds) {
+	SetWindowPos(hwnd, NULL, bounds.x, bounds.y, bounds.width, bounds.height, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
 }
 
-string OSGetWindowTitle(OSWindow wnd) {
-	int len = GetWindowTextLengthA(wnd.GetHwnd());
+bool OSWindow::operator==(OSWindow other) {
+	return this->hwnd == other.hwnd;
+}
+JSRectangle OSWindow::GetBounds() {
+	RECT rect;
+	if (!GetWindowRect(hwnd, &rect)) { return JSRectangle(0, 0, 0, 0); }
+	return JSRectangle(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
+}
+JSRectangle OSWindow::GetClientBounds() {
+	RECT rect;
+	if (!GetClientRect(hwnd, &rect)) { return JSRectangle(0, 0, 0, 0); }
+	return JSRectangle(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
+}
+bool OSWindow::IsValid() {
+	if (!hwnd) { return false; }
+	return IsWindow(hwnd);
+}
+string OSWindow::GetTitle() {
+	int len = GetWindowTextLengthA(hwnd);
 	if (len == 0) { return string(""); }
-	vector<char> buf(len+1);
-	GetWindowTextA(wnd.GetHwnd(), &buf[0], len + 1);
+	vector<char> buf(len + 1);
+	GetWindowTextA(hwnd, &buf[0], len + 1);
 	return string(&buf[0]);
 }
-
-bool OSIsWindow(OSWindow wnd) {
-	return IsWindow(wnd.GetHwnd());
+bool OSWindow::FromJsValue(const Napi::Value jsval, OSWindow* out) {
+	if (!jsval.IsTypedArray()) { return false; }
+	auto buf = jsval.As<Napi::Uint8Array>();
+	if (buf.IsEmpty()) { return false; }
+	if (buf.ByteLength() != sizeof(HWND)) { return false; }
+	byte* ptr = (byte*)buf.Data();
+	//TODO does Data() already include ByteOffset or not?
+	//ptr += buf->ByteOffset();
+	//TODO double check bitness situation here (on 32bit as well?)
+	*out = OSWindow(*(HWND*)ptr);
 }
 
-void OSSetWindowBounds(OSWindow wnd, JSRectangle bounds) {
-	SetWindowPos(wnd.GetHwnd(), NULL, bounds.x, bounds.y, bounds.width, bounds.height, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-}
-
-vector<DWORD> OSGetProcessesByName(std::wstring name, DWORD parentpid)
+vector<DWORD> OSGetProcessesByName(std::string name, DWORD parentpid)
 {
 	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 	PROCESSENTRY32 process = {};
@@ -42,7 +58,7 @@ vector<DWORD> OSGetProcessesByName(std::wstring name, DWORD parentpid)
 	while (first ? Process32First(snapshot, &process) : Process32Next(snapshot, &process))
 	{
 		first = false;
-		if (std::wstring(process.szExeFile) == name && (parentpid == 0 || parentpid == process.th32ParentProcessID))
+		if (std::string(process.szExeFile) == name && (parentpid == 0 || parentpid == process.th32ParentProcessID))
 		{
 			res.push_back(process.th32ProcessID);
 		}
@@ -73,13 +89,31 @@ BOOL CALLBACK WinFindMainWindow_callback(HWND handle, LPARAM lParam)
 	return FALSE;
 }
 
-HWND OSFindMainWindow(unsigned long process_id)
+OSWindow OSFindMainWindow(uint32_t process_id)
 {
 	WinFindMainWindow_data data;
 	data.process_id = process_id;
 	data.window_handle = 0;
 	EnumWindows(WinFindMainWindow_callback, (LPARAM)&data);
-	return data.window_handle;
+	return OSWindow(data.window_handle);
+}
+
+void OSCaptureDesktopMulti(vector<CaptureRect> rects) {
+	for (auto const& capt:rects) {
+		OSCaptureDesktop(capt.data, capt.size, capt.rect.x, capt.rect.y, capt.rect.width, capt.rect.height);
+	}
+}
+
+//TODO this is stupid
+void flipBGRAtoRGBA(void* data, size_t len) {
+	unsigned char* index = (unsigned char*)data;
+	unsigned char* end = index + len;
+	for (; index < end; index += 4) {
+		unsigned char tmp = index[0];
+		//TODO profile this, does the compiler do fancy simd swizzles if we self assign 1 and 3 as well?
+		index[0] = index[2];
+		index[2] = tmp;
+	}
 }
 
 void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h)
@@ -87,6 +121,7 @@ void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h
 	HDC hdc = GetDC(NULL);
 	HDC hDest = CreateCompatibleDC(hdc);
 	HBITMAP hbDesktop = CreateCompatibleBitmap(hdc, w, h);
+	//TODO hbDekstop can be null (in alt1 code at least)
 	SelectObject(hDest, hbDesktop);
 
 	//copy desktop to bitmap
@@ -101,8 +136,9 @@ void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h
 	bmi.biCompression = BI_RGB;
 	bmi.biSizeImage = 0;
 
-	//TODO safeguard maxlength somehow
+	//TODO safeguard buffer overflow somehow
 	GetDIBits(hdc, hbDesktop, 0, h, target, (BITMAPINFO*)&bmi, DIB_RGB_COLORS);
+	flipBGRAtoRGBA(target, maxlength);
 
 	//release everything
 	ReleaseDC(NULL, hdc);
@@ -132,7 +168,7 @@ void CALLBACK HookProcRelay(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd,
 WinWindowTracker::WinWindowTracker(OSWindow wnd, WindowListener* cb) :cb(cb) {
 	this->wnd = wnd;
 	DWORD pid;
-	GetWindowThreadProcessId(wnd.GetHwnd(), &pid);
+	GetWindowThreadProcessId(wnd.hwnd, &pid);
 	auto hook = SetWinEventHook(0x0000, 0x0030, 0, HookProcRelay, pid, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 	auto hook2 = SetWinEventHook(0x8000, 0x800B, 0, HookProcRelay, pid, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 	eventmap.insert_or_assign(hook, this);
@@ -150,56 +186,24 @@ WinWindowTracker::~WinWindowTracker() {
 }
 
 void WinWindowTracker::HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD idEventThread, DWORD dwmsEventTime) {
-	if (hwnd == wnd.GetHwnd()) {
+	if (hwnd == wnd.hwnd) {
 		if (event == EVENT_OBJECT_STATECHANGE || event == EVENT_OBJECT_DESTROY) {
 			//TODO in c# code there is a bunch more logic for this one
 			cb->OnWindowClose();
 		}
 
 		if (event == EVENT_SYSTEM_MOVESIZEEND) {
-			cb->OnWindowMove(OSGetWindowBounds(wnd), WindowDragPhase::End);
+			cb->OnWindowMove(wnd.GetBounds(), WindowDragPhase::End);
 		}
 		if (event == EVENT_SYSTEM_MOVESIZESTART) {
-			cb->OnWindowMove(OSGetWindowBounds(wnd), WindowDragPhase::Start);
+			cb->OnWindowMove(wnd.GetBounds(), WindowDragPhase::Start);
 		}
 		if (event == EVENT_OBJECT_LOCATIONCHANGE) {
-			cb->OnWindowMove(OSGetWindowBounds(wnd), WindowDragPhase::Moving);
+			cb->OnWindowMove(wnd.GetBounds(), WindowDragPhase::Moving);
 		}
 	}
 }
 
-class WinOsWindow :public OSWindow2 {
-private:
-	HWND hwnd;
-public:
-	WinOsWindow(HWND hwnd) {
-		this->hwnd = hwnd;
-	}
-	void SetBounds(JSRectangle bounds) {
-		SetWindowPos(hwnd, NULL, bounds.x, bounds.y, bounds.width, bounds.height, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-	}
-	virtual JSRectangle GetBounds() {
-		RECT rect;
-		if (!GetWindowRect(hwnd, &rect)) { return MakeJSRect(0, 0, 0, 0); }
-		return MakeJSRect(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
-	}
-	virtual bool IsValid() {
-		return IsWindow(hwnd);
-	}
-	string GetTitle() {
-		return "";
-	}
-	static bool FromJS(const v8::Local<v8::Value> jsval, OSWindow2* out) {
-		if (!jsval->IsArrayBufferView()) { return false; }
-		auto buf = jsval.As<v8::ArrayBufferView>();
-		if (buf->ByteLength() != sizeof(OSWindow)) { return false; }
-		byte* ptr = (byte*)buf->Buffer()->GetContents().Data();
-		ptr += buf->ByteOffset();
-		//TODO double check bitness situation here (on 32bit as well?)
-		*out = WinOsWindow(*(HWND*)ptr);
-	}
-
-};
 
 std::unique_ptr<OSWindowTracker> OSNewWindowTracker(OSWindow wnd, WindowListener* cb) {
 	return std::unique_ptr<OSWindowTracker>(new WinWindowTracker(wnd, cb));
