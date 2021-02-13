@@ -20,8 +20,8 @@ using std::wstring;
 
 typedef unsigned char byte;
 
-enum PinEdge { TopLeft = 0, TopRight = 1, BotLeft = 2, BotRight = 3 };
-const char* PinEdgeNames[] = { "topleft","topright","botleft","botright" };
+enum PinEdge { None = 0, Left = 1 << 0, Top = 1 << 1, Right = 1 << 2, Bot = 1 << 3 };
+enum PinMode { Auto = 0, Cover = 1 };
 
 //#define v8string(str) (v8::String::NewFromUtf8(isolate, str))
 //#define v8string(str) (v8::String::NewFromUtf8(isolate, str).ToLocalChecked())
@@ -48,33 +48,6 @@ struct PluginInstance {
 	Napi::FunctionReference* JsOSWindowCtr;
 	Napi::FunctionReference* JsPinnedWindowCtr;
 };
-
-
-bool JsArgsInt32(const Napi::CallbackInfo& info, int index, int* out) {
-	if (!info[index].IsNumber()) {
-		Napi::TypeError::New(info.Env(), "expected argument of type int32 at position " + std::to_string(index)).ThrowAsJavaScriptException();
-		return false;
-	}
-	*out = info[index].As<Napi::Number>().Int32Value();
-	return true;
-}
-bool JsArgsUInt32(const Napi::CallbackInfo& info, int index, unsigned int* out) {
-	if (!info[index].IsNumber()) {
-		Napi::TypeError::New(info.Env(), "expected argument of type uint32 at position " + std::to_string(index)).ThrowAsJavaScriptException();
-		return false;
-	}
-	*out = info[index].As<Napi::Number>().Uint32Value();
-	return true;
-}
-
-bool JsArgsString(const Napi::CallbackInfo& info, int index,string& out) {
-	if (!info[index].IsString()) {
-		Napi::TypeError::New(info.Env(), "expected argument of type string at position " + std::to_string(index)).ThrowAsJavaScriptException();
-		return false;
-	}
-	out = info[index].As<Napi::String>();
-	return true;
-}
 
 //TODO parameter type of objectwrap
 class OSWindow {
@@ -128,37 +101,30 @@ private:
 	Napi::Value JsGetClientBounds(const Napi::CallbackInfo& info) { return inst.GetClientBounds().ToJs(info.Env()); }
 	Napi::Value JsGetTitle(const Napi::CallbackInfo& info) { return Napi::String::New(info.Env(), inst.GetTitle()); }
 	void JsSetBounds(const Napi::CallbackInfo& info) {
-		int x, y, w, h;
-		if (!JsArgsInt32(info, 0, &x) || !JsArgsInt32(info, 1, &y) || !JsArgsInt32(info, 2, &w) || !JsArgsInt32(info, 3, &h)) { return; }
+		int x = info[0].As<Napi::Number>().Int32Value();
+		int y = info[1].As<Napi::Number>().Int32Value();
+		int w = info[2].As<Napi::Number>().Int32Value();
+		int h = info[3].As<Napi::Number>().Int32Value();
 		inst.SetBounds(JSRectangle(x, y, w, h));
 	}
 	Napi::Value JsSetPinParent(const Napi::CallbackInfo& info);
 	Napi::Value JsEquals(const Napi::CallbackInfo& info);
 };
 
-bool JsArgsOSWindow(const Napi::CallbackInfo& info, int index, OSWindow* out) {
-	//TODO check types
-	//TODO all kinds of pointer stuff going wrong here?
-	*out = Napi::ObjectWrap<JsOSWindow>::Unwrap(info[index].As<Napi::Object>())->GetInstance();
-	return true;
+OSWindow JsArgsOSWindow(const Napi::Value& val) {
+	return Napi::ObjectWrap<JsOSWindow>::Unwrap(val.As<Napi::Object>())->GetInstance();
 }
 
-bool ParseJsRect(const Napi::Value& val, JSRectangle* out) {
-	if (!val.IsObject()) { return false; }
+JSRectangle ParseJsRect(const Napi::Value& val) {
 	auto rect = val.As<Napi::Object>();
-	auto x = rect.Get("x");
-	auto y = rect.Get("y");
-	auto width = rect.Get("width");
-	auto height = rect.Get("height");
-	if (!x.IsNumber() || !y.IsNumber() || !width.IsNumber() || !height.IsNumber()) {
-		return false;
-	}
-	*out = JSRectangle(x.As<Napi::Number>().Int32Value(), y.As<Napi::Number>().Int32Value(), width.As<Napi::Number>().Int32Value(), height.As<Napi::Number>().Int32Value());
-	return true;
+	int x = rect.Get("x").As<Napi::Number>().Int32Value();
+	int y = rect.Get("y").As<Napi::Number>().Int32Value();
+	int w = rect.Get("width").As<Napi::Number>().Int32Value();
+	int h = rect.Get("height").As<Napi::Number>().Int32Value();
+	return JSRectangle(x, y, w, h);
 }
 
 Napi::Value JsOSWindow::JsEquals(const Napi::CallbackInfo& info) {
-	OSWindow other;
-	if (!JsArgsOSWindow(info, 0, &other)) { return Napi::Boolean::New(info.Env(), false); }
+	OSWindow other = JsArgsOSWindow(info[0]);
 	return Napi::Boolean::New(info.Env(), inst == other);
 }

@@ -5,25 +5,24 @@
 #include "pinnedwindow.h"
 
 
-Napi::Value captureDesktop(const Napi::CallbackInfo& info)
-{
-	Napi::Env env = info.Env();
-	auto q = info[0];
-	int x, y, w, h;
-	if (!JsArgsInt32(info, 0, &x) || !JsArgsInt32(info, 1, &y) || !JsArgsInt32(info, 2, &w) || !JsArgsInt32(info, 3, &h)) {
-		return env.Undefined();
-	}
+Napi::Value captureDesktop(const Napi::CallbackInfo& info) {
+	auto env = info.Env();
+	int x = info[0].As<Napi::Number>().Int32Value();
+	int y = info[1].As<Napi::Number>().Int32Value();
+	int w = info[2].As<Napi::Number>().Int32Value();
+	int h = info[3].As<Napi::Number>().Int32Value();
 
 	if (w <= 0 || h <= 0 || w > 1e4 || h > 1e4)
 	{
-		Napi::TypeError::New(info.Env(), "invalid capture size").ThrowAsJavaScriptException();
-		return env.Undefined();
+		Napi::TypeError::New(env, "invalid capture size").ThrowAsJavaScriptException();
 	}
 
 	int totalbytes = w * h * 4;
 	auto buf = Napi::ArrayBuffer::New(env, totalbytes);
 	OSCaptureDesktop(buf.Data(), buf.ByteLength(), x, y, w, h);
-	return Napi::Uint8Array::New(env, totalbytes, buf, 0, napi_uint8_clamped_array);
+	auto arr = Napi::Uint8Array::New(env, totalbytes, buf, 0, napi_uint8_clamped_array);
+	//TODO what is the warning "do not slice"
+	return arr;
 }
 
 Napi::Value captureDesktopMulti(const Napi::CallbackInfo& info) {
@@ -36,9 +35,11 @@ Napi::Value captureDesktopMulti(const Napi::CallbackInfo& info) {
 	for (int a = 0; a < props.Length(); a++) {
 		auto key = props.Get(a);
 		if (!key.IsString() || !obj.HasOwnProperty(key)) { continue; }
+		auto val = obj.Get(key);
+		if (val.IsNull() || val.IsUndefined()) { continue; }
 		CaptureRect capt;
-		if (!ParseJsRect(obj.Get(props.Get(a)),&capt.rect)) { continue; }
-		size_t size = capt.rect.width * capt.rect.height * 4;
+		capt.rect = ParseJsRect(val);
+		size_t size = (size_t)capt.rect.width * capt.rect.height * 4;
 		auto buffer = Napi::ArrayBuffer::New(env, size);
 		capt.data = buffer.Data();
 		capt.size = buffer.ByteLength();
@@ -50,23 +51,25 @@ Napi::Value captureDesktopMulti(const Napi::CallbackInfo& info) {
 	return ret;
 }
 
-Napi::Value getProcessMainWindow(const Napi::CallbackInfo& info)
-{
-	uint32_t pid;
-	if (!JsArgsUInt32(info, 0, &pid)) { return info.Env().Undefined(); }
+Napi::Value getProcessMainWindow(const Napi::CallbackInfo& info) {
+	uint32_t pid = info[0].As<Napi::Number>().Uint32Value();
 	auto wnd = OSFindMainWindow(pid);
 	return JsOSWindow::Create(info.Env(), wnd);
 }
 
-Napi::Value getProcessesByName(const Napi::CallbackInfo& info)
-{
-	string utf8str;
-	if (!JsArgsString(info, 0, utf8str)) { return info.Env().Undefined(); }
-
-	auto pids = OSGetProcessesByName(utf8str, NULL);
+Napi::Value getProcessesByName(const Napi::CallbackInfo& info) {
+	string name = info[0].As<Napi::String>().Utf8Value();
+	auto pids = OSGetProcessesByName(name, NULL);
 	auto ret = Napi::Array::New(info.Env(), pids.size());
 	for (int i = 0; i < pids.size(); i++) { ret.Set(i, pids[i]); }
 	return ret;
+}
+
+//TODO remove
+Napi::Value test(const Napi::CallbackInfo& info) {
+	bool loss;
+	auto val = info[0].As<Napi::BigInt>().Uint64Value(&loss);
+	return Napi::Boolean::New(info.Env(), loss);
 }
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
@@ -84,6 +87,9 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
 	exports.Set("getProcessesByName", Napi::Function::New(env, getProcessesByName));
 	exports.Set("captureDesktopMulti", Napi::Function::New(env, captureDesktopMulti));
 	exports.Set("OSWindow", oswindowctr);
+
+
+	exports.Set("test", Napi::Function::New(env, test));
 	return exports;
 }
 

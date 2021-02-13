@@ -6,7 +6,7 @@ import { dialog, Menu, MenuItem, Tray } from "electron/main";
 import { MenuItemConstructorOptions, nativeImage } from "electron/common";
 import { handleSchemeArgs, handleSchemeCommand } from "./schemehandler";
 import { readJsonWithBOM, relPath, rsClientExe, sameDomainResolve, schemestring, UserError, weborigin } from "./lib";
-import { InstalledApp, identifyApp } from "./appconfig";
+import { identifyApp } from "./appconfig";
 import { getProcessesByName, getProcessMainWindow, OSWindow, OSWindowPin } from "./native";
 import { OverlayCommand } from "./shared";
 
@@ -43,33 +43,39 @@ export class RsInstance {
 
 	overlayCommands(frameid: number, commands: OverlayCommand[]) {
 		if (!this.overlayWindow) {
+			console.log("opening overlay");
 			let bounds = this.window.getClientBounds();
 			let browser = new BrowserWindow({
 				webPreferences: { nodeIntegration: true, webviewTag: true, enableRemoteModule: true },
 				frame: false,
 				transparent: true,
-				backgroundColor: "transparent",
 				x: bounds.x,
 				y: bounds.y,
 				width: bounds.width,
 				height: bounds.height,
 				show: false,
-				resizable:false,
-				movable:false
+				//resizable: false,
+				movable: false,
+				skipTaskbar: true
 			});
 
 			let nativewnd = new OSWindow(browser.getNativeWindowHandle());
-			let pin = nativewnd.setPinParent(this.window);
+			let pin = nativewnd.setPinParent(this.window, "cover");
 			browser.loadFile(path.resolve(__dirname, "overlayframe/index.html"));
-			browser.webContents.openDevTools();
+			//browser.webContents.openDevTools();
 			browser.once("ready-to-show", () => {
 				browser.show();
 			});
-			browser.webContents.on("dom-ready", e => {
+			browser.webContents.once("dom-ready", e => {
 				for (let stalled of this.overlayWindow!.stalledOverlay) {
 					browser.webContents.send("overlay", stalled.frameid, stalled.cmd);
 				}
-			})
+			});
+			browser.on("closed", e => {
+				this.overlayWindow = null;
+				console.log("overlay closed");
+			});
+			browser.setIgnoreMouseEvents(true);
 			this.overlayWindow = { browser, nativewnd, pin, stalledOverlay: [{ frameid: frameid, cmd: commands }] };
 		} else {
 			this.overlayWindow.browser.webContents.send("overlay", frameid, commands);

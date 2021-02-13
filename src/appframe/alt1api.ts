@@ -142,10 +142,15 @@ var alt1api: Partial<typeof alt1> = {
 	overLayFreezeGroup(groupid) { queueOverlayCommand({ command: "freezegroup", groupid }); },
 	overLayContinueGroup(groupid) { queueOverlayCommand({ command: "continuegroup", groupid }); },
 	overLayClearGroup(groupid) { queueOverlayCommand({ command: "cleargroup", groupid }); },
-	overLayRefreshGroup(groupid) { queueOverlayCommand({ command: "refreshgroup", groupid }); }
+	overLayRefreshGroup(groupid) { queueOverlayCommand({ command: "refreshgroup", groupid }); },
+	setTooltip(str) { return true; },
+	clearTooltip() { alt1api.setTooltip!(""); }
 };
 
 function subImageData(img: FlatImageData, x: number, y: number, w: number, h: number) {
+	if (x == 0 && y == 0 && w == img.width && h == img.height) {
+		return img;
+	}
 	let newdata = new Uint8ClampedArray(w * h * 4);
 	let data = img.data;
 	let imgwidth = img.width;
@@ -161,6 +166,8 @@ Object.defineProperties(alt1api, {
 	rsY: { get() { return getRsInfo()?.y || 0; } },
 	rsWidth: { get() { return getRsInfo()?.width || 0; } },
 	rsHeight: { get() { return getRsInfo()?.height || 0; } },
+	rsLinked: { get() { return true; } },
+	currentWorld: { get() { return 1; } }
 });
 
 (window as any).alt1 = alt1api;

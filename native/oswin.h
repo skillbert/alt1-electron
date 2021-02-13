@@ -20,7 +20,9 @@ JSRectangle OSWindow::GetBounds() {
 }
 JSRectangle OSWindow::GetClientBounds() {
 	RECT rect;
-	if (!GetClientRect(hwnd, &rect)) { return JSRectangle(0, 0, 0, 0); }
+	GetClientRect(hwnd, &rect);
+	//this rect to point cast is actually specified in winapi docs and has special behavior
+	MapWindowPoints(hwnd, HWND_DESKTOP, (LPPOINT)&rect, 2);
 	return JSRectangle(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
 }
 bool OSWindow::IsValid() {
@@ -37,13 +39,9 @@ string OSWindow::GetTitle() {
 bool OSWindow::FromJsValue(const Napi::Value jsval, OSWindow* out) {
 	if (!jsval.IsTypedArray()) { return false; }
 	auto buf = jsval.As<Napi::Uint8Array>();
-	if (buf.IsEmpty()) { return false; }
 	if (buf.ByteLength() != sizeof(HWND)) { return false; }
-	byte* ptr = (byte*)buf.Data();
-	//TODO does Data() already include ByteOffset or not?
-	//ptr += buf->ByteOffset();
 	//TODO double check bitness situation here (on 32bit as well?)
-	*out = OSWindow(*(HWND*)ptr);
+	*out = OSWindow(*(HWND*)buf.Data());
 }
 
 vector<DWORD> OSGetProcessesByName(std::string name, DWORD parentpid)

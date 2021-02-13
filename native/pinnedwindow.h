@@ -4,8 +4,11 @@ class PinnedWindow :public WindowListener {
 	OSWindow window;
 	OSWindow pinparent;
 	PinEdge edge;
-	int hordist;
-	int verdist;
+	PinMode mode;
+	int distleft;
+	int disttop;
+	int distright;
+	int distbot;
 	std::unique_ptr<OSWindowTracker> tracker;
 
 public:
@@ -18,14 +21,27 @@ public:
 	}
 
 	void ParentMoved(JSRectangle parentBounds) {
-		JSRectangle selfbounds = window.GetBounds();
-
-		//determine where we should end
-		int newx, newy;
-		if (edge == PinEdge::TopLeft || edge == PinEdge::TopRight) { newy = parentBounds.y + verdist; }
-		else { newy = parentBounds.y + parentBounds.height - verdist - selfbounds.height; }
-		if (edge == PinEdge::TopLeft || edge == PinEdge::BotLeft) { newx = parentBounds.x + hordist; }
-		else { newx = parentBounds.x + parentBounds.width - hordist - selfbounds.width; }
+		JSRectangle bounds = window.GetBounds();
+			
+		//determine where we should be
+		if (edge & PinEdge::Left) {
+			bounds.x = parentBounds.x + distleft;
+			if (edge & PinEdge::Right) {
+				bounds.width = parentBounds.width - distleft - distright;
+			}
+		}
+		else if (edge & PinEdge::Right) {
+			bounds.x = parentBounds.x + parentBounds.width - distright - bounds.width;
+		}
+		if (edge & PinEdge::Top) {
+			bounds.y = parentBounds.y + disttop;
+			if (edge & PinEdge::Bot) {
+				bounds.height = parentBounds.height - disttop - distbot;
+			}
+		}
+		else if (edge & PinEdge::Bot) {
+			bounds.y = parentBounds.y + parentBounds.height- distbot- bounds.height;
+		}
 
 		//get active monitor bounds
 		HMONITOR hmonitor = MonitorFromWindow(window.hwnd, MONITOR_DEFAULTTONEAREST);
@@ -40,39 +56,40 @@ public:
 		int maxbot = max(monitor.rcWork.bottom, parentBounds.y + parentBounds.height);
 
 		//make sure the window is always inside either the parent window or the containing screen
-		newx = max(newx, minleft);
-		newy = max(newy, mintop);
-		newx = min(newx, maxright - selfbounds.width);
-		newy = min(newy, maxbot - selfbounds.height);
+		bounds.x = max(bounds.x, minleft);
+		bounds.y = max(bounds.y, mintop);
+		bounds.x = min(bounds.x, maxright - bounds.width);
+		bounds.y = min(bounds.y, maxbot - bounds.height);
 
-		window.SetBounds(JSRectangle(newx, newy, selfbounds.width, selfbounds.height));
+		window.SetBounds(bounds);
 	}
 
 	void UpdatePinAnchor() {
 		JSRectangle selfbounds = window.GetBounds();
 		JSRectangle parentbounds = pinparent.GetBounds();
+		parentbounds.x++;
 
-		int left = selfbounds.x - parentbounds.x;
-		int top = selfbounds.y - parentbounds.y;
-		int right = parentbounds.x + parentbounds.width - selfbounds.x - selfbounds.width;
-		int bottom = parentbounds.y + parentbounds.height - selfbounds.y - selfbounds.height;
-		hordist = min(left, right);
-		verdist = min(top, bottom);
-		if (left < right) {
-			edge = (top < bottom ? PinEdge::TopLeft : PinEdge::BotLeft);
+		distleft = selfbounds.x - parentbounds.x;
+		disttop = selfbounds.y - parentbounds.y;
+		distright = parentbounds.x + parentbounds.width - selfbounds.x - selfbounds.width;
+		distbot = parentbounds.y + parentbounds.height - selfbounds.y - selfbounds.height;
+		if (mode == PinMode::Auto) {
+			//TODO find out how to do enum flags without cast???
+			edge = static_cast<PinEdge>((disttop < distbot ? PinEdge::Top : PinEdge::Bot) | (distleft < distright ? PinEdge::Left : PinEdge::Right));
 		}
-		else {
-			edge = (top < bottom ? PinEdge::TopRight : PinEdge::BotRight);
+		if (mode == PinMode::Cover) {
+			edge = static_cast<PinEdge>(PinEdge::Left | PinEdge::Right | PinEdge::Top | PinEdge::Bot);
 		}
 	}
 
-	static std::shared_ptr<PinnedWindow> NewPinning(OSWindow wnd, OSWindow parent);
+	static std::shared_ptr<PinnedWindow> NewPinning(OSWindow wnd, OSWindow parent,PinMode mode);
 	static std::shared_ptr<PinnedWindow> FindPinning(OSWindow wnd);
 
 private:
-	PinnedWindow(OSWindow wnd,OSWindow parent) {
+	PinnedWindow(OSWindow wnd,OSWindow parent,PinMode mode) {
 		this->window = wnd;
 		this->pinparent = parent;
+		this->mode = mode;
 		UpdatePinAnchor();
 
 		//show behind parent, then show parent behind self (no way to show in front in winapi)
@@ -110,8 +127,8 @@ private:
 vector<std::shared_ptr<PinnedWindow>> pinnedWindows;
 
 
-std::shared_ptr<PinnedWindow> PinnedWindow::NewPinning(OSWindow wnd, OSWindow parent) {
-	auto pin = std::shared_ptr<PinnedWindow>(new PinnedWindow(wnd, parent));
+std::shared_ptr<PinnedWindow> PinnedWindow::NewPinning(OSWindow wnd, OSWindow parent, PinMode mode) {
+	auto pin = std::shared_ptr<PinnedWindow>(new PinnedWindow(wnd, parent, mode));
 	pinnedWindows.push_back(pin);
 	return pin;
 }
@@ -126,8 +143,13 @@ std::shared_ptr<PinnedWindow> PinnedWindow::FindPinning(OSWindow wnd) {
 }
 
 Napi::Value JsOSWindow::JsSetPinParent(const Napi::CallbackInfo& info) {
-	OSWindow parent;
-	JsArgsOSWindow(info, 0, &parent);
-	auto pin = std::shared_ptr<PinnedWindow>(PinnedWindow::NewPinning(inst, parent));
+	OSWindow parent = JsArgsOSWindow(info[0]);
+	string pinmodestr = info[1].As<Napi::String>().Utf8Value();
+
+	PinMode pinmode;
+	if (pinmodestr == "auto") { pinmode = PinMode::Auto; }
+	else if (pinmodestr == "cover") { pinmode = PinMode::Cover; }
+	else { Napi::TypeError::New(info.Env(), "invalid pinmode argument").ThrowAsJavaScriptException(); }
+	auto pin = std::shared_ptr<PinnedWindow>(PinnedWindow::NewPinning(inst, parent, pinmode));
 	return JsPinnedWindow::Create(info.Env(), pin);
 }

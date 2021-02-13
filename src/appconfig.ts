@@ -1,6 +1,7 @@
-import { installedApps } from "./main";
+import { } from "./main";
 import { readJsonWithBOM, sameDomainResolve, UserError } from "./lib";
 import fetch from "node-fetch";
+import { Bookmark, settings } from "./settings";
 
 type AppPermission = "pixel" | "game" | "overlay";
 export type AppConfigImport = {
@@ -16,24 +17,6 @@ export type AppConfigImport = {
 	maxWidth: number,
 	maxHeight: number,
 	permissions: string
-}
-export type InstalledApp = Bookmark & {
-	configUrl: string,
-	permissions: AppPermission[]
-}
-export type Bookmark = {
-	appName: string,
-	description: string,
-	appUrl: string,
-	iconUrl: string,
-	iconCached: string,
-	iconCachedTime: number,
-	defaultWidth: number,
-	defaultHeight: number,
-	minWidth: number,
-	minHeight: number,
-	maxWidth: number,
-	maxHeight: number
 }
 
 async function tryUpdateIcon(bm: Bookmark) {
@@ -53,10 +36,10 @@ async function tryUpdateIcon(bm: Bookmark) {
 }
 
 export function installApp(url: URL, res: AppConfigImport) {
-	if (installedApps.find(a => a.configUrl == url.href)) {
+	if (settings.bookmarks.find(a => a.configUrl == url.href)) {
 		throw new UserError("App is already installed");
 	}
-	let config: InstalledApp = {
+	let config: Bookmark = {
 		appName: "",
 		description: "",
 		configUrl: url.href,
@@ -70,13 +53,15 @@ export function installApp(url: URL, res: AppConfigImport) {
 		minWidth: 20,
 		maxWidth: 0,
 		maxHeight: 0,
-		permissions: []
+		permissions: [],
+		lastRect: null,
+		wasOpen: false
 	};
 	updateAppconfig(config, res);
-	installedApps.push(config);
+	settings.bookmarks.push(config);
 	return config;
 }
-function updateAppconfig(prev: InstalledApp, config: AppConfigImport) {
+function updateAppconfig(prev: Bookmark, config: AppConfigImport) {
 
 	let entryurl = sameDomainResolve(prev.configUrl, config.appUrl);
 	let iconurl = sameDomainResolve(prev.configUrl, config.iconUrl);
@@ -97,7 +82,7 @@ function updateAppconfig(prev: InstalledApp, config: AppConfigImport) {
 export async function identifyApp(url: URL) {
 	let res: AppConfigImport = await fetch(url.href).then(r => readJsonWithBOM(r));
 	//TODO typecheck result
-	let prev = installedApps.find(q => q.configUrl == url.href);
+	let prev = settings.bookmarks.find(q => q.configUrl == url.href);
 	if (!prev) {
 		//throw new Error("App is not installed yet");
 		//TODO add app confirm ui

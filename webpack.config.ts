@@ -17,6 +17,7 @@ function addMain() {
 	config.entry("alt1lite", "./main.ts");
 	config.entry("appframe/index", "./appframe/index.tsx");
 	config.entry("appframe/alt1api", "./appframe/alt1api.ts");
+	config.entry("overlayframe/index", "./overlayframe/index.tsx");
 	config.entry("settings/index", "./settings/index.tsx");
 	config.output(path.resolve(__dirname, "dist"));
 	if (!config.opts.production) {

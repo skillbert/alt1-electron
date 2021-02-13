@@ -6,15 +6,26 @@ import { BrowserView, dialog, Menu, MenuItem, Tray, webContents } from "electron
 import { MenuItemConstructorOptions, nativeImage } from "electron/common";
 import { handleSchemeArgs, handleSchemeCommand } from "./schemehandler";
 import { readJsonWithBOM, relPath, rsClientExe, sameDomainResolve, schemestring, UserError, weborigin } from "./lib";
-import { InstalledApp, identifyApp } from "./appconfig";
-import { captureDesktop, getProcessMainWindow, getProcessesByName, OSWindow, OSWindowPin, captureDesktopMulti } from "./native";
+import { identifyApp } from "./appconfig";
+import { captureDesktop, getProcessMainWindow, getProcessesByName, OSWindow, OSWindowPin, captureDesktopMulti, test } from "./native";
 import { detectInstances, RsInstance, rsInstances } from "./rsinstance";
 import { OverlayCommand, Rectangle } from "./shared";
+import { Bookmark, loadSettings, saveSettings, settings } from "./settings";
+
+
+try {
+	console.log(test(BigInt(-1)));
+} catch (e) {
+	console.log(e + "");
+}
+//process.exit();
+
+
+
 
 (global as any).native = require("./native");
 (global as any).Alt1lite = require("./main");
 
-export const installedApps: InstalledApp[] = [];
 export const managedWindows: ManagedWindow[] = [];
 export function getManagedWindow(w: webContents) { return managedWindows.find(q => q.window.webContents == w); }
 export function getManagedAppWindow(id: number) { return managedWindows.find(q => q.appFrameId == id); }
@@ -27,17 +38,14 @@ var alt1icon = nativeImage.createFromPath(relPath(require("!file-loader!./imgs/a
 if (!app.requestSingleInstanceLock()) { app.exit(); }
 app.setAsDefaultProtocolClient(schemestring, undefined, [__non_webpack_require__.main!.filename]);
 handleSchemeArgs(process.argv);
+loadSettings();
 
+app.on("before-quit", e => saveSettings());
 app.on("second-instance", (e, argv, cwd) => handleSchemeArgs(argv));
 app.on('window-all-closed', e => e.preventDefault());
 app.once('ready', () => {
 
 	//TODO only do this on config reset
-	fetch(`${weborigin}/data/alt1/defaultapps.json`).then(r => readJsonWithBOM(r)).then(async (r: { folder: string, name: string, url: string }[]) => {
-		for (let appbase of r) { await identifyApp(new URL(`${weborigin}${appbase.url}`)); }
-		let stats = installedApps.find(a => a.configUrl == "http://localhost/apps/clue/appconfig.json")!;
-		openApp(stats);
-	});
 
 	globalShortcut.register("Alt+1", () => { });
 
@@ -45,22 +53,21 @@ app.once('ready', () => {
 	initIpcApi();
 });
 
-export function openApp(app: InstalledApp) {
+export function openApp(app: Bookmark) {
 	new ManagedWindow(app);
 }
 class ManagedWindow {
-	appConfig: InstalledApp;
+	appConfig: Bookmark;
 	window: BrowserWindow;
 	nativeWindow: OSWindow;
 	windowPin: OSWindowPin;
 	rsClient: RsInstance;
 	appFrameId = -1;
 
-	constructor(app: InstalledApp) {
+	constructor(app: Bookmark) {
 		this.window = new BrowserWindow({
 			webPreferences: { nodeIntegration: true, webviewTag: true, enableRemoteModule: true },
 			frame: false,
-			//alwaysOnTop: true,
 			width: app.defaultWidth,
 			height: app.defaultHeight
 		});
@@ -70,9 +77,9 @@ class ManagedWindow {
 		this.appConfig = app;
 
 		this.nativeWindow = new OSWindow(this.window.getNativeWindowHandle());
-		this.windowPin = this.nativeWindow.setPinParent(this.rsClient.window);
+		this.windowPin = this.nativeWindow.setPinParent(this.rsClient.window, "auto");
 		this.window.loadFile(path.resolve(__dirname, "appframe/index.html"));
-		this.window.webContents.openDevTools();
+		//this.window.webContents.openDevTools();
 		this.window.once("close", () => {
 			managedWindows.splice(managedWindows.indexOf(this), 1);
 		});
@@ -86,7 +93,7 @@ function drawTray() {
 	tray.setToolTip("Alt1 Lite");
 	tray.on("click", e => {
 		let menu: MenuItemConstructorOptions[] = [];
-		for (let app of installedApps) {
+		for (let app of settings.bookmarks) {
 			menu.push({
 				label: app.appName,
 				icon: app.iconCached ? nativeImage.createFromDataURL(app.iconCached).resize({ height: 20, width: 20 }) : undefined,
@@ -132,7 +139,7 @@ function initIpcApi() {
 			let wnd = getManagedAppWindow(e.sender.id);
 			if (!wnd?.rsClient.window) { throw new Error("capture window not found"); }
 			let bounds = wnd.rsClient.window.getClientBounds();
-			e.returnValue = { value: { width: w, height: h, data: captureDesktop(x - bounds.x, y - bounds.y, w, h) } };
+			e.returnValue = { value: { width: w, height: h, data: captureDesktop(x + bounds.x, y + bounds.y, w, h) } };
 		} catch (err) {
 			e.returnValue = { error: "" + err };
 		}
@@ -150,7 +157,7 @@ function initIpcApi() {
 		let wnd = getManagedAppWindow(e.sender.id);
 		if (!wnd?.rsClient.window) { throw new Error("capture window not found"); }
 		let bounds = wnd.rsClient.window.getClientBounds();
-		return captureDesktop(x - bounds.x, y - bounds.y, w, h);
+		return captureDesktop(x + bounds.x, y + bounds.y, w, h);
 	});
 
 	ipcMain.handle("capturemulti", (e, rects: { [key: string]: Rectangle }) => {
@@ -159,14 +166,15 @@ function initIpcApi() {
 		let bounds = wnd.rsClient.window.getClientBounds();
 		for (let a in rects) {
 			if (!rects[a]) { continue; }
-			rects[a].x -= bounds.x;
-			rects[a].y -= bounds.y;
+			rects[a].x += bounds.x;
+			rects[a].y += bounds.y;
 		}
 		return captureDesktopMulti(rects);
 	});
 
 	ipcMain.on("overlay", (e, commands: OverlayCommand[]) => {
 		let wnd = getManagedAppWindow(e.sender.id);
+		//TODO errors here are not rethrown in app, just swallow and log them
 		if (!wnd?.rsClient.window) { throw new Error("capture window not found"); }
 		wnd.rsClient.overlayCommands(wnd.appFrameId, commands);
 	});

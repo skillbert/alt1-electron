@@ -1,8 +1,9 @@
 import { dialog, Menu, MenuItem, Tray } from "electron/main";
-import { installedApps, openApp } from "./main";
+import { openApp } from "./main";
 import fetch from "node-fetch";
 import { readJsonWithBOM, schemestring, UserError } from "./lib";
 import { AppConfigImport, installApp } from "./appconfig";
+import { settings } from "./settings";
 
 function takeString(str: string, part: string) {
 	if (!str.startsWith(part)) { throw new UserError("expected string not matched at " + str.slice(0, 20)); }
@@ -33,7 +34,7 @@ export async function handleSchemeCommand(url: string) {
 				installApp(cnfurl, res);
 				break
 			case "openapp":
-				let app = installedApps.find(a => a.configUrl == url);
+				let app = settings.bookmarks.find(a => a.configUrl == url);
 				if (!app) { throw new UserError("app not found"); }
 				openApp(app);
 				break;
