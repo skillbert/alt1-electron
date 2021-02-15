@@ -7,18 +7,19 @@ import { MenuItemConstructorOptions, nativeImage } from "electron/common";
 import { handleSchemeArgs, handleSchemeCommand } from "./schemehandler";
 import { readJsonWithBOM, relPath, rsClientExe, sameDomainResolve, schemestring, UserError, weborigin } from "./lib";
 import { identifyApp } from "./appconfig";
-import { captureDesktop, getProcessMainWindow, getProcessesByName, OSWindow, OSWindowPin, captureDesktopMulti, test } from "./native";
+import { native, OSWindow, OSWindowPin } from "./native";
 import { detectInstances, RsInstance, rsInstances } from "./rsinstance";
 import { OverlayCommand, Rectangle } from "./shared";
 import { Bookmark, loadSettings, saveSettings, settings } from "./settings";
+import { boundMethod } from "autobind-decorator";
 
 
-try {
-	console.log(test(BigInt(-1)));
-} catch (e) {
-	console.log(e + "");
-}
-//process.exit();
+// try {
+// 	console.log(test(BigInt(-1)));
+// } catch (e) {
+// 	console.log(e + "");
+// }
+// process.exit();
 
 
 
@@ -54,8 +55,14 @@ app.once('ready', () => {
 });
 
 export function openApp(app: Bookmark) {
-	new ManagedWindow(app);
+	detectInstances();
+	let inst = rsInstances[0];
+	if (!inst) { console.error("no rs instance found"); }
+	else {
+		new ManagedWindow(app, inst);
+	}
 }
+
 class ManagedWindow {
 	appConfig: Bookmark;
 	window: BrowserWindow;
@@ -64,7 +71,7 @@ class ManagedWindow {
 	rsClient: RsInstance;
 	appFrameId = -1;
 
-	constructor(app: Bookmark) {
+	constructor(app: Bookmark, rsclient: RsInstance) {
 		this.window = new BrowserWindow({
 			webPreferences: { nodeIntegration: true, webviewTag: true, enableRemoteModule: true },
 			frame: false,
@@ -72,17 +79,26 @@ class ManagedWindow {
 			height: app.defaultHeight
 		});
 
-		detectInstances();
-		this.rsClient = rsInstances[0];
+		this.rsClient = rsclient;
 		this.appConfig = app;
 
 		this.nativeWindow = new OSWindow(this.window.getNativeWindowHandle());
-		this.windowPin = this.nativeWindow.setPinParent(this.rsClient.window, "auto");
+		this.windowPin = new OSWindowPin(this.nativeWindow, this.rsClient.window, "auto");
+		this.windowPin.once("close", () => {
+			this.window.close();
+			app.wasOpen = true;
+		});
 		this.window.loadFile(path.resolve(__dirname, "appframe/index.html"));
 		//this.window.webContents.openDevTools();
 		this.window.once("close", () => {
 			managedWindows.splice(managedWindows.indexOf(this), 1);
+			this.windowPin.unpin();
 		});
+		//setparentwindow doesnt work
+		// this.window.webContents.on("devtools-opened", e => {
+		// 	let wnd = (this.window.webContents.devToolsWebContents as any).getOwnerBrowserWindow();
+		// 	wnd!.setParentWindow(this.window);
+		// });
 
 		managedWindows.push(this);
 	}
@@ -138,8 +154,7 @@ function initIpcApi() {
 		try {
 			let wnd = getManagedAppWindow(e.sender.id);
 			if (!wnd?.rsClient.window) { throw new Error("capture window not found"); }
-			let bounds = wnd.rsClient.window.getClientBounds();
-			e.returnValue = { value: { width: w, height: h, data: captureDesktop(x + bounds.x, y + bounds.y, w, h) } };
+			e.returnValue = { value: { width: w, height: h, data: native.captureWindow(wnd.rsClient.window.handle, x, y, w, h) } };
 		} catch (err) {
 			e.returnValue = { error: "" + err };
 		}
@@ -156,20 +171,13 @@ function initIpcApi() {
 	ipcMain.handle("capture", (e, x, y, w, h) => {
 		let wnd = getManagedAppWindow(e.sender.id);
 		if (!wnd?.rsClient.window) { throw new Error("capture window not found"); }
-		let bounds = wnd.rsClient.window.getClientBounds();
-		return captureDesktop(x + bounds.x, y + bounds.y, w, h);
+		return native.captureWindow(wnd.rsClient.window.handle, x, y, w, h);
 	});
 
 	ipcMain.handle("capturemulti", (e, rects: { [key: string]: Rectangle }) => {
 		let wnd = getManagedAppWindow(e.sender.id);;
 		if (!wnd?.rsClient.window) { throw new Error("capture window not found"); }
-		let bounds = wnd.rsClient.window.getClientBounds();
-		for (let a in rects) {
-			if (!rects[a]) { continue; }
-			rects[a].x += bounds.x;
-			rects[a].y += bounds.y;
-		}
-		return captureDesktopMulti(rects);
+		return native.captureWindowMulti(wnd.rsClient.window.handle, rects);
 	});
 
 	ipcMain.on("overlay", (e, commands: OverlayCommand[]) => {

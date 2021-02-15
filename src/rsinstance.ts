@@ -7,15 +7,22 @@ import { MenuItemConstructorOptions, nativeImage } from "electron/common";
 import { handleSchemeArgs, handleSchemeCommand } from "./schemehandler";
 import { readJsonWithBOM, relPath, rsClientExe, sameDomainResolve, schemestring, UserError, weborigin } from "./lib";
 import { identifyApp } from "./appconfig";
-import { getProcessesByName, getProcessMainWindow, OSWindow, OSWindowPin } from "./native";
+import { OSWindow, native, OSWindowPin } from "./native";
 import { OverlayCommand } from "./shared";
+import { EventEmitter } from "events";
+import { TypedEmitter } from "./typedemitter";
 
 
 
 export var rsInstances: RsInstance[] = [];
 
 export function detectInstances() {
-	let pids = getProcessesByName(rsClientExe);
+	let pids = native.getProcessesByName(rsClientExe);
+	for (let inst of rsInstances) {
+		if (pids.indexOf(inst.pid) == -1) {
+			inst.close();
+		}
+	}
 	for (let pid of pids) {
 		let inst = rsInstances.find(q => q.pid == pid);
 		if (!inst) {
@@ -24,14 +31,19 @@ export function detectInstances() {
 	}
 }
 
-export class RsInstance {
+type RsInstanceEvents = {
+	close: []
+}
+
+export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 	pid: number;
 	window: OSWindow;
 	overlayWindow: { browser: BrowserWindow, nativewnd: OSWindow, pin: OSWindowPin, stalledOverlay: { frameid: number, cmd: OverlayCommand[] }[] } | null;
 
 	constructor(pid: number) {
+		super();
 		this.pid = pid;
-		this.window = getProcessMainWindow(pid);
+		this.window = new OSWindow(native.getProcessMainWindow(pid));
 		this.overlayWindow = null;
 
 		rsInstances.push(this);
@@ -39,6 +51,7 @@ export class RsInstance {
 
 	close() {
 		rsInstances.splice(rsInstances.indexOf(this), 1);
+		this.emit("close");
 	}
 
 	overlayCommands(frameid: number, commands: OverlayCommand[]) {
@@ -60,7 +73,7 @@ export class RsInstance {
 			});
 
 			let nativewnd = new OSWindow(browser.getNativeWindowHandle());
-			let pin = nativewnd.setPinParent(this.window, "cover");
+			let pin = new OSWindowPin(nativewnd, this.window, "cover");
 			browser.loadFile(path.resolve(__dirname, "overlayframe/index.html"));
 			//browser.webContents.openDevTools();
 			browser.once("ready-to-show", () => {

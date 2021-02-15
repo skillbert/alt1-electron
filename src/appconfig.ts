@@ -2,22 +2,23 @@ import { } from "./main";
 import { readJsonWithBOM, sameDomainResolve, UserError } from "./lib";
 import fetch from "node-fetch";
 import { Bookmark, settings } from "./settings";
+import Checks, { UservarType } from "../../compiled/other/typecheck";
 
-type AppPermission = "pixel" | "game" | "overlay";
-export type AppConfigImport = {
-	appName: string,
-	description: string,
-	appUrl: string,
-	configUrl: string,
-	iconUrl: string,
-	defaultWidth: number,
-	defaultHeight: number,
-	minWidth: number,
-	minHeight: number,
-	maxWidth: number,
-	maxHeight: number,
-	permissions: string
-}
+var checkAppConfigImport = Checks.obj({
+	appName: Checks.str(),
+	description: Checks.str(""),
+	appUrl: Checks.str(),
+	configUrl: Checks.str(),
+	iconUrl: Checks.str(""),
+	defaultWidth: Checks.num(400),
+	defaultHeight: Checks.num(500),
+	minWidth: Checks.num(0),
+	minHeight: Checks.num(0),
+	maxWidth: Checks.num(10000),
+	maxHeight: Checks.num(10000),
+	permissions: Checks.arr(Checks.strenum({ pixel: "Pixel", game: "Gamestate", overlay: "Overlay" }))
+});
+export type AppConfigImport = UservarType<typeof checkAppConfigImport>;
 
 async function tryUpdateIcon(bm: Bookmark) {
 	try {
@@ -80,15 +81,21 @@ function updateAppconfig(prev: Bookmark, config: AppConfigImport) {
 }
 
 export async function identifyApp(url: URL) {
-	let res: AppConfigImport = await fetch(url.href).then(r => readJsonWithBOM(r));
+	try {
+		let res: unknown = await fetch(url.href).then(r => readJsonWithBOM(r));
+		var config = checkAppConfigImport.load(res, { defaultOnError: true });
+	} catch (e) {
+		console.log("failed to load appconfig from url: " + url);
+		return;
+	}
 	//TODO typecheck result
 	let prev = settings.bookmarks.find(q => q.configUrl == url.href);
 	if (!prev) {
 		//throw new Error("App is not installed yet");
 		//TODO add app confirm ui
-		return installApp(url, res);
+		return installApp(url, config);
 	} else {
-		updateAppconfig(prev, res);
+		updateAppconfig(prev, config);
 		return prev;
 	}
 }

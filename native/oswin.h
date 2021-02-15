@@ -1,18 +1,19 @@
 #pragma once
 
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#include <TlHelp32.h>
+typedef HWND OSRawWindow;
+#include "os.h"
+
 /*
 * Currently using the Ansi version of windows api's as v8 expects utf8, this will work for ascii but will garble anything outside ascii
 */
-
-#include "os.h"
 
 void OSWindow::SetBounds(JSRectangle bounds) {
 	SetWindowPos(hwnd, NULL, bounds.x, bounds.y, bounds.width, bounds.height, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
 }
 
-bool OSWindow::operator==(OSWindow other) {
-	return this->hwnd == other.hwnd;
-}
 JSRectangle OSWindow::GetBounds() {
 	RECT rect;
 	if (!GetWindowRect(hwnd, &rect)) { return JSRectangle(0, 0, 0, 0); }
@@ -36,15 +37,15 @@ string OSWindow::GetTitle() {
 	GetWindowTextA(hwnd, &buf[0], len + 1);
 	return string(&buf[0]);
 }
-bool OSWindow::FromJsValue(const Napi::Value jsval, OSWindow* out) {
-	if (!jsval.IsTypedArray()) { return false; }
-	auto buf = jsval.As<Napi::Uint8Array>();
-	if (buf.ByteLength() != sizeof(HWND)) { return false; }
-	//TODO double check bitness situation here (on 32bit as well?)
-	*out = OSWindow(*(HWND*)buf.Data());
+OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
+	auto handle = jsval.As<Napi::BigInt>();
+	bool lossless;
+	auto handleint = handle.Uint64Value(&lossless);
+	if (!lossless) { Napi::RangeError::New(jsval.Env(), "Invalid handle").ThrowAsJavaScriptException(); }
+	return OSWindow((HWND)handleint);
 }
 
-vector<DWORD> OSGetProcessesByName(std::string name, DWORD parentpid)
+vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid)
 {
 	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 	PROCESSENTRY32 process = {};
@@ -52,7 +53,7 @@ vector<DWORD> OSGetProcessesByName(std::string name, DWORD parentpid)
 
 	//Walk through all processes
 	bool first = true;
-	vector<DWORD> res;
+	vector<uint32_t> res;
 	while (first ? Process32First(snapshot, &process) : Process32Next(snapshot, &process))
 	{
 		first = false;
@@ -97,9 +98,25 @@ OSWindow OSFindMainWindow(uint32_t process_id)
 }
 
 void OSCaptureDesktopMulti(vector<CaptureRect> rects) {
-	for (auto const& capt:rects) {
+	for (auto const& capt : rects) {
 		OSCaptureDesktop(capt.data, capt.size, capt.rect.x, capt.rect.y, capt.rect.width, capt.rect.height);
 	}
+}
+
+void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects) {
+	for (auto const& capt : rects) {
+		OSCaptureWindow(capt.data, capt.size, wnd, capt.rect.x, capt.rect.y, capt.rect.width, capt.rect.height);
+	}
+}
+
+void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
+	//show behind parent, then show parent behind self (no way to show in front in winapi)
+	if (parent.hwnd != 0) {
+		SetWindowPos(wnd.hwnd, parent.hwnd, 0, 0, 0, 0, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
+		SetWindowPos(parent.hwnd, wnd.hwnd, 0, 0, 0, 0, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
+	}
+	//TODO there was a reason to do this instead of using the nicely named SetParent window, find out why
+	SetWindowLongPtr(wnd.hwnd, GWLP_HWNDPARENT, (uint64_t)parent.hwnd);
 }
 
 //TODO this is stupid
@@ -114,13 +131,12 @@ void flipBGRAtoRGBA(void* data, size_t len) {
 	}
 }
 
-void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h)
-{
-	HDC hdc = GetDC(NULL);
+void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y, int w, int h) {
+	HDC hdc = GetDC(wnd.hwnd);
 	HDC hDest = CreateCompatibleDC(hdc);
 	HBITMAP hbDesktop = CreateCompatibleBitmap(hdc, w, h);
 	//TODO hbDekstop can be null (in alt1 code at least)
-	SelectObject(hDest, hbDesktop);
+	HGDIOBJ old = SelectObject(hDest, hbDesktop);
 
 	//copy desktop to bitmap
 	BitBlt(hDest, 0, 0, w, h, hdc, x, y, SRCCOPY);
@@ -139,70 +155,75 @@ void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h
 	flipBGRAtoRGBA(target, maxlength);
 
 	//release everything
+	SelectObject(hDest, old);
 	ReleaseDC(NULL, hdc);
 	DeleteObject(hbDesktop);
 	DeleteDC(hDest);
 }
 
-struct WinWindowTracker:public OSWindowTracker {
-private:
-	WindowListener* cb;
-	OSWindow wnd;
-	vector<HWINEVENTHOOK> hooks;
-public:
-	WinWindowTracker(OSWindow wnd, WindowListener* cb);
-	~WinWindowTracker();
-	void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD idEventThread, DWORD dwmsEventTime);
-};
-
-std::map<HWINEVENTHOOK, WinWindowTracker*> eventmap;
-
-void CALLBACK HookProcRelay(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD idEventThread, DWORD dwmsEventTime) {
-	auto target = eventmap.find(hWinEventHook);
-	assert(target != eventmap.end());
-	target->second->HookProc(hWinEventHook, event, hwnd, idObject, idChild, idEventThread, dwmsEventTime);
+void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h)
+{
+	return OSCaptureWindow(target, maxlength, NULL, x, y, w, h);
 }
 
-WinWindowTracker::WinWindowTracker(OSWindow wnd, WindowListener* cb) :cb(cb) {
+Napi::Value OSWindow::ToJS(Napi::Env env) {
+	return Napi::BigInt::New(env, (uint64_t)hwnd);
+}
+
+void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD idEventThread, DWORD dwmsEventTime) {
+	OSWindow wnd(hwnd);
+	auto wndpos = windowHandlers.find(wnd);
+	if (wndpos == windowHandlers.end()) { return; }
+
+	vector<Napi::Value> args;
+	auto evnt = wndpos->second.end();
+	switch (event) {
+	case EVENT_OBJECT_STATECHANGE:
+	case EVENT_OBJECT_DESTROY:
+		evnt = wndpos->second.find(WindowEventType::Close);
+		if (evnt != wndpos->second.end()) {
+			for (const auto& h : evnt->second.listeners) {
+				auto env = h.Env();
+				Napi::HandleScope scope(env);
+				h.MakeCallback(env.Global(), {});
+			}
+		}
+		break;
+	case EVENT_SYSTEM_MOVESIZEEND:
+	case EVENT_SYSTEM_MOVESIZESTART:
+	case EVENT_OBJECT_LOCATIONCHANGE:
+		const char* phase = (event == EVENT_SYSTEM_MOVESIZEEND ? "end" : event == EVENT_SYSTEM_MOVESIZESTART ? "start" : "moving");
+		JSRectangle bounds = wnd.GetBounds();
+		evnt = wndpos->second.find(WindowEventType::Move);
+		if (evnt != wndpos->second.end()) {
+			for (const auto& h : evnt->second.listeners) {
+				auto env = h.Env();
+				Napi::HandleScope scope(env);
+				h.MakeCallback(env.Global(), { bounds.ToJs(env),Napi::String::New(env, phase) });
+			}
+		}
+		break;
+	}
+}
+
+TrackedEvent::TrackedEvent(OSWindow wnd, WindowEventType type) {
 	this->wnd = wnd;
 	DWORD pid;
+	//TODO error handling
 	GetWindowThreadProcessId(wnd.hwnd, &pid);
-	auto hook = SetWinEventHook(0x0000, 0x0030, 0, HookProcRelay, pid, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-	auto hook2 = SetWinEventHook(0x8000, 0x800B, 0, HookProcRelay, pid, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-	eventmap.insert_or_assign(hook, this);
-	eventmap.insert_or_assign(hook2, this);
-	hooks.push_back(hook);
-	hooks.push_back(hook2);
-}
-
-WinWindowTracker::~WinWindowTracker() {
-	for (auto it = hooks.begin(); it != hooks.end(); it++) {
-		//TODO weird cast, not completely sure if winapi is being weird here or its me
-		UnhookWindowsHookEx((HHOOK)*it);
-		eventmap.erase(*it);
+	switch (type) {
+	case WindowEventType::Move:
+		eventhandle = SetWinEventHook(0x0000, 0x0030, 0, HookProc, pid, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+		break;
+	case WindowEventType::Close:
+		eventhandle = SetWinEventHook(0x8000, 0x800B, 0, HookProc, pid, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+		break;
+	default:
+		//TODO error handling
+		eventhandle = 0;
+		break;
 	}
 }
-
-void WinWindowTracker::HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD idEventThread, DWORD dwmsEventTime) {
-	if (hwnd == wnd.hwnd) {
-		if (event == EVENT_OBJECT_STATECHANGE || event == EVENT_OBJECT_DESTROY) {
-			//TODO in c# code there is a bunch more logic for this one
-			cb->OnWindowClose();
-		}
-
-		if (event == EVENT_SYSTEM_MOVESIZEEND) {
-			cb->OnWindowMove(wnd.GetBounds(), WindowDragPhase::End);
-		}
-		if (event == EVENT_SYSTEM_MOVESIZESTART) {
-			cb->OnWindowMove(wnd.GetBounds(), WindowDragPhase::Start);
-		}
-		if (event == EVENT_OBJECT_LOCATIONCHANGE) {
-			cb->OnWindowMove(wnd.GetBounds(), WindowDragPhase::Moving);
-		}
-	}
-}
-
-
-std::unique_ptr<OSWindowTracker> OSNewWindowTracker(OSWindow wnd, WindowListener* cb) {
-	return std::unique_ptr<OSWindowTracker>(new WinWindowTracker(wnd, cb));
+TrackedEvent::~TrackedEvent() {
+	UnhookWindowsHookEx((HHOOK)eventhandle);
 }

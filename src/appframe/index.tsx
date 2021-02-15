@@ -40,9 +40,14 @@ function AppFrame(p: {}) {
 
 		appview = view;
 		view.addEventListener("dom-ready", () => {
-			let id = appview!.getWebContentsId();
-			appcontents = remote.webContents.getAllWebContents().find(q => q.id == id) || null;
+			appcontents = remote.webContents.fromId(appview!.getWebContentsId());
 		});
+		//setparent doesnt work as expected
+		// view.addEventListener("devtools-opened", e => {
+		// 	let devwnd = (appcontents!.devToolsWebContents as any).getOwnerBrowserWindow();
+		// 	let selfwnd = remote.getCurrentWindow();
+		// 	if (devwnd && selfwnd) { devwnd.setParentWindow(selfwnd); }
+		// });
 		(window as any).view = view;
 		return () => { appview = null };
 	}, []);
@@ -108,7 +113,7 @@ function startDrag(factors: { x: number, y: number, w: number, h: number }) {
 			let dx = pos.x - startpos.x;
 			let dy = pos.y - startpos.y;
 			thiswindow.nativeWindow.setBounds(initial.x + dx * factors.x, initial.y + dy * factors.y, initial.width + dx * factors.w, initial.height + dy * factors.h);
-			thiswindow.windowPin.updatePinAnchor();
+			thiswindow.windowPin.updateDocking();
 		};
 		let cleanup = () => {
 			window.removeEventListener("mousemove", moved);
