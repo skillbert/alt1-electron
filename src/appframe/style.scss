@@ -26,6 +26,7 @@ body {
 	right: 0px;
 }
 .button {
+	-webkit-app-region:none;
 	background-position: 0px 0px;
 	width: 14px;
 	height: 14px;
@@ -50,6 +51,7 @@ body {
 }
 
 .border {
+	-webkit-app-region:none;
 	background: black;
 	border: 1px solid red;
 	&-left,

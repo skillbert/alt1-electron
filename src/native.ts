@@ -15,22 +15,26 @@ export const native = __non_webpack_require__(tmpfile) as {
 	captureWindowMulti: <T extends { [key: string]: Rectangle | undefined | null }>(wnd: BigInt, rect: T) => { [key in keyof T]: Uint8ClampedArray },
 	getProcessMainWindow: (pid: number) => BigInt,
 	getProcessesByName: (name: string) => number[],
+	getProcessName: (pid: number) => string,
 
+	getWindowPid: (wnd: BigInt) => number,
 	getWindowBounds: (wnd: BigInt) => Rectangle,
 	getClientBounds: (wnd: BigInt) => Rectangle,
 	getWindowTitle: (wnd: BigInt) => string,
 	setWindowBounds: (wnd: BigInt, x: number, y: number, w: number, h: number) => void,
 	setWindowParent: (wnd: BigInt, parent: BigInt) => void,
 
-	newWindowListener: (wnd: BigInt, ...args: windowEvents) => void,
-	removeWindowListener: (wnd: BigInt, ...args: windowEvents) => void,
+	newWindowListener: <T extends keyof windowEvents>(wnd: BigInt, type: T, cb: windowEvents[T]) => void,
+	removeWindowListener: <T extends keyof windowEvents>(wnd: BigInt, type: T, cb: windowEvents[T]) => void,
 
 	test: (...arg: any) => any
 }
 
-type windowEvents =
-	[type: "close", cb: () => any] |
-	[type: "move", cb: (bounds: Rectangle, phase: "start" | "moving" | "end") => any];
+type windowEvents = {
+	close: () => any,
+	move: (bounds: Rectangle, phase: "start" | "moving" | "end") => any,
+	show: (wnd: BigInt, event: number) => any
+};
 
 export class OSWindow {
 	handle: BigInt;
@@ -47,13 +51,17 @@ export class OSWindow {
 	setBounds(x: number, y: number, w: number, h: number) { return native.setWindowBounds(this.handle, x, y, w, h); }
 	setParent(parent: OSWindow | null) { return native.setWindowParent(this.handle, parent ? parent.handle : BigInt(0)) }
 
-	on(...[type, cb]: windowEvents) {
-		native.newWindowListener(this.handle, type as any, cb);
+	on<T extends keyof windowEvents>(type: T, cb: windowEvents[T]) {
+		native.newWindowListener(this.handle, type, cb);
 	}
-	removeListener(...[type, cb]: windowEvents) {
-		native.removeWindowListener(this.handle, type as any, cb);
+	removeListener<T extends keyof windowEvents>(type: T, cb: windowEvents[T]) {
+		native.removeWindowListener(this.handle, type, cb);
 	}
 }
+
+//can mean different things depending on context
+//usually means the desktop or "any" window
+export const OSNullWindow = new OSWindow(BigInt(0));
 
 type OSWindowPinEvents = {
 	close: [],

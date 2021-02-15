@@ -8,8 +8,17 @@
 enum class CaptureMode { Desktop = 0, Window = 1, OpenGL = 2 };
 const char* captureModeText[] = { "desktop","window","opengl" };
 
+CaptureMode capturemode = CaptureMode::OpenGL;
 
-CaptureMode capturemode = CaptureMode::Window;
+std::map<OSWindow, OpenGLCapture::HookedProcess*> hookedWindows;
+
+Napi::Value HookWindow(const Napi::CallbackInfo& info) {
+	auto wnd = OSWindow::FromJsValue(info[0]);
+
+	auto handle = OpenGLCapture::HookProcess(wnd.hwnd);
+	hookedWindows[wnd] = handle;
+	return Napi::BigInt::New(info.Env(), (uintptr_t)handle);
+}
 
 void CaptureWindowMultiAuto(OSWindow wnd, CaptureMode mode, vector<CaptureRect> rects, Napi::Env env) {
 	for (const auto& capt : rects) {
@@ -33,6 +42,26 @@ void CaptureWindowMultiAuto(OSWindow wnd, CaptureMode mode, vector<CaptureRect> 
 	case CaptureMode::Window:
 		OSCaptureWindowMulti(wnd, rects);
 		break;
+	case CaptureMode::OpenGL: {
+		auto handle = OpenGLCapture::HookProcess(wnd.hwnd);
+		vector<JSRectangle> rawrects(rects.size());
+		for (int i = 0; i < rects.size(); i++) {
+			rawrects[i] = rects[i].rect;
+		}
+		auto pixeldata = OpenGLCapture::CaptureMultiple(handle, &rawrects[0], rawrects.size());
+		if (!pixeldata) {
+			char errtext[200];
+			int len = OpenGLCapture::GetDebug(errtext, sizeof(errtext));
+			Napi::Error::New(env, string() + "Failed to capture, native error: " + errtext).ThrowAsJavaScriptException();
+		}
+		//TODO get rid of copy somehow? (src memory is shared ipc memory so not trivial)
+		size_t offset = 0;
+		for (int i = 0; i < rects.size(); i++) {
+			memcpy(rects[i].data, pixeldata + offset, rects[i].size);
+			offset += rawrects[i].width * rawrects[i].height * 4;
+		}
+		break;
+	}
 	default:
 		Napi::RangeError::New(env, "No capture mode selected").ThrowAsJavaScriptException();
 	}
@@ -91,6 +120,8 @@ Napi::Value GetProcessesByName(const Napi::CallbackInfo& info) {
 	return ret;
 }
 
+Napi::Value GetProcessName(const Napi::CallbackInfo& info) { return Napi::String::New(info.Env(), OSGetProcessName(info[0].As<Napi::Number>().Uint32Value())); }
+Napi::Value GetWindowPid(const Napi::CallbackInfo& info) { return Napi::Number::New(info.Env(), OSWindow::FromJsValue(info[0]).GetPid()); }
 Napi::Value GetWindowBounds(const Napi::CallbackInfo& info) { return OSWindow::FromJsValue(info[0]).GetBounds().ToJs(info.Env()); }
 Napi::Value GetClientBounds(const Napi::CallbackInfo& info) { return OSWindow::FromJsValue(info[0]).GetClientBounds().ToJs(info.Env()); }
 Napi::Value GetWindowTitle(const Napi::CallbackInfo& info) { return Napi::String::New(info.Env(), OSWindow::FromJsValue(info[0]).GetTitle()); }

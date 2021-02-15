@@ -36,12 +36,19 @@ var alt1icon = nativeImage.createFromPath(relPath(require("!file-loader!./imgs/a
 
 //TODO this is needed for current native module, need to make it context aware
 //app.allowRendererProcessReuse = false;
+const originalCwd = process.cwd();
+process.chdir(__dirname);
 if (!app.requestSingleInstanceLock()) { app.exit(); }
 app.setAsDefaultProtocolClient(schemestring, undefined, [__non_webpack_require__.main!.filename]);
 handleSchemeArgs(process.argv);
 loadSettings();
 
-app.on("before-quit", e => saveSettings());
+app.on("before-quit", e => {
+	rsInstances.forEach(c => c.close());
+	saveSettings();
+	//needed for restart
+	process.chdir(originalCwd);
+});
 app.on("second-instance", (e, argv, cwd) => handleSchemeArgs(argv));
 app.on('window-all-closed', e => e.preventDefault());
 app.once('ready', () => {
@@ -54,13 +61,13 @@ app.once('ready', () => {
 	initIpcApi();
 });
 
-export function openApp(app: Bookmark) {
-	detectInstances();
-	let inst = rsInstances[0];
-	if (!inst) { console.error("no rs instance found"); }
-	else {
-		new ManagedWindow(app, inst);
+export function openApp(app: Bookmark, inst?: RsInstance) {
+	if (!inst) {
+		detectInstances();
+		inst = rsInstances[0];
 	}
+	if (!inst) { console.error("no rs instance found"); }
+	else { new ManagedWindow(app, inst); }
 }
 
 class ManagedWindow {
@@ -94,6 +101,13 @@ class ManagedWindow {
 			managedWindows.splice(managedWindows.indexOf(this), 1);
 			this.windowPin.unpin();
 		});
+		//this would create a feedback loop
+		// this.window.on("resized", () => this.windowPin.updateDocking());
+		// this.window.on("moved", () => this.windowPin.updateDocking());
+		// this.window.on("move", console.log.bind(console));
+		// this.window.on("resize", console.log.bind(console));
+		// this.window.on("moved", console.log.bind(console));
+		// this.window.on("resized", console.log.bind(console));
 		//setparentwindow doesnt work
 		// this.window.webContents.on("devtools-opened", e => {
 		// 	let wnd = (this.window.webContents.devToolsWebContents as any).getOwnerBrowserWindow();
@@ -113,13 +127,20 @@ function drawTray() {
 			menu.push({
 				label: app.appName,
 				icon: app.iconCached ? nativeImage.createFromDataURL(app.iconCached).resize({ height: 20, width: 20 }) : undefined,
-				click: openApp.bind(null, app),
+				click: openApp.bind(null, app, undefined),
 			});
 		}
 		menu.push({ type: "separator" });
 		menu.push({ label: "Settings", click: showSettings });
 		menu.push({ label: "Exit", click: e => app.quit() });
-		menu.push({ label: "Restart", click: e => { app.relaunch(); app.quit(); } });
+		menu.push({
+			label: "Restart", click: e => {
+				process.chdir(originalCwd);
+				app.relaunch();
+				process.chdir(__dirname);
+				app.quit();
+			}
+		});
 		let menuinst = Menu.buildFromTemplate(menu);
 		tray!.setContextMenu(menuinst);
 		tray!.popUpContextMenu();

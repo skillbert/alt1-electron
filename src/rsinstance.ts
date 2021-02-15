@@ -7,14 +7,35 @@ import { MenuItemConstructorOptions, nativeImage } from "electron/common";
 import { handleSchemeArgs, handleSchemeCommand } from "./schemehandler";
 import { readJsonWithBOM, relPath, rsClientExe, sameDomainResolve, schemestring, UserError, weborigin } from "./lib";
 import { identifyApp } from "./appconfig";
-import { OSWindow, native, OSWindowPin } from "./native";
+import { OSWindow, native, OSWindowPin, OSNullWindow } from "./native";
 import { OverlayCommand } from "./shared";
 import { EventEmitter } from "events";
 import { TypedEmitter } from "./typedemitter";
-
+import { boundMethod } from "autobind-decorator";
+import { settings } from "./settings";
+import { openApp } from "./main";
 
 
 export var rsInstances: RsInstance[] = [];
+
+function init() {
+	detectInstances();
+	OSNullWindow.on("show", windowCreated);
+};
+setImmediate(init);
+
+function windowCreated(handle: BigInt) {
+	if (handle == BigInt(0)) { return; }
+	let wnd = new OSWindow(handle);
+	let pid = native.getWindowPid(wnd.handle);
+	if (!rsInstances.find(q => q.pid == pid)) {
+		let processname = native.getProcessName(pid);
+		let title = wnd.getTitle();
+		if (title.startsWith("RuneScape") && processname == rsClientExe) {
+			new RsInstance(pid);
+		}
+	}
+}
 
 export function detectInstances() {
 	let pids = native.getProcessesByName(rsClientExe);
@@ -44,14 +65,26 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 		super();
 		this.pid = pid;
 		this.window = new OSWindow(native.getProcessMainWindow(pid));
+		this.window.on("close", this.close);
 		this.overlayWindow = null;
 
+		for (let app of settings.bookmarks) {
+			if (app.wasOpen) {
+				app.wasOpen = false;
+				openApp(app);
+			}
+		}
+
 		rsInstances.push(this);
+		console.log(`new rs client tracked with pid: ${pid}`);
 	}
 
+	@boundMethod
 	close() {
 		rsInstances.splice(rsInstances.indexOf(this), 1);
+		this.window.removeListener("close", this.close);
 		this.emit("close");
+		console.log(`stopped tracking rs client with pid: ${this.pid}`);
 	}
 
 	overlayCommands(frameid: number, commands: OverlayCommand[]) {
