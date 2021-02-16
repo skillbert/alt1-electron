@@ -8,7 +8,8 @@
     "release": "npm run build -- -p",
     "watch": "npm run build -- --watch",
     "ui": "electron --inspect=9228 ./dist/alt1lite.bundle.js",
-    "uibuild": "electron-rebuild -f alt1lite"
+    "uibuild": "electron-rebuild -f alt1lite",
+    "install": "npm run uibuild"
   },
   "author": "",
   "license": "ISC",

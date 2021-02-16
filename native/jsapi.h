@@ -8,7 +8,7 @@
 enum class CaptureMode { Desktop = 0, Window = 1, OpenGL = 2 };
 const char* captureModeText[] = { "desktop","window","opengl" };
 
-CaptureMode capturemode = CaptureMode::OpenGL;
+CaptureMode capturemode = CaptureMode::Window;
 
 std::map<OSWindow, OpenGLCapture::HookedProcess*> hookedWindows;
 

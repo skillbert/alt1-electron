@@ -103,22 +103,6 @@ var alt1api: Partial<typeof alt1> = {
 		if (!boundImage || id != 1) { return ""; }
 		return imagedataToBase64(subImageData(boundImage, x, y, w, h));
 	},
-	capture(x, y, width, height) {
-		return captureSync(x, y, width, height).data;
-	},
-	async captureAsync(x, y, width, height) {
-		let r = await ipcRenderer.invoke("capture", x, y, width, height);
-		return r;
-	},
-	async captureMultiAsync(areas) {
-		let r = await ipcRenderer.invoke("capturemulti", areas);
-		return r;
-	},
-	bindGetRegionBuffer(id, x, y, w, h) {
-		if (!boundImage || id != 1) { throw new Error("no bound image"); }
-		return subImageData(boundImage, x, y, w, h).data;
-	},
-
 	overLayLine(color, linewidth, x1, y1, x2, y2, time) {
 		queueOverlayCommand({ command: "draw", time, action: { type: "line", x1, y1, x2, y2, color, linewidth } });
 		return true;
@@ -147,6 +131,27 @@ var alt1api: Partial<typeof alt1> = {
 	clearTooltip() { alt1api.setTooltip!(""); }
 };
 
+//API extension for fast capture
+//declared here to not break outdated window.alt1 typing
+let extendedapi = {
+	capture(x, y, width, height) {
+		return captureSync(x, y, width, height).data;
+	},
+	async captureAsync(x, y, width, height) {
+		let r = await ipcRenderer.invoke("capture", x, y, width, height);
+		return r;
+	},
+	async captureMultiAsync(areas) {
+		let r = await ipcRenderer.invoke("capturemulti", areas);
+		return r;
+	},
+	bindGetRegionBuffer(id, x, y, w, h) {
+		if (!boundImage || id != 1) { throw new Error("no bound image"); }
+		return subImageData(boundImage, x, y, w, h).data;
+	}
+};
+
+
 function subImageData(img: FlatImageData, x: number, y: number, w: number, h: number) {
 	if (x == 0 && y == 0 && w == img.width && h == img.height) {
 		return img;
@@ -169,5 +174,7 @@ Object.defineProperties(alt1api, {
 	rsLinked: { get() { return true; } },
 	currentWorld: { get() { return 1; } }
 });
+
+Object.assign(alt1api, extendedapi);
 
 (window as any).alt1 = alt1api;

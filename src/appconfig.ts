@@ -2,7 +2,7 @@ import { } from "./main";
 import { readJsonWithBOM, sameDomainResolve, UserError } from "./lib";
 import fetch from "node-fetch";
 import { Bookmark, settings } from "./settings";
-import Checks, { UservarType } from "../../compiled/other/typecheck";
+import Checks, { UservarType } from "../tempexternal/typecheck";
 
 var checkAppConfigImport = Checks.obj({
 	appName: Checks.str(),

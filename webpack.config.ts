@@ -1,5 +1,5 @@
 import * as path from "path";
-import Alt1Chain from "@alt1/webpack/index";
+import Alt1Chain from "@alt1/webpack";
 
 
 module.exports = [].concat(

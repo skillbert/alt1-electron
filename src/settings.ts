@@ -1,4 +1,4 @@
-import Checks, { UservarType } from "../../compiled/other/typecheck";
+import Checks, { UservarType } from "../tempexternal/typecheck";
 import * as fs from "fs";
 import { configFile, readJsonWithBOM, weborigin } from "./lib";
 import { identifyApp } from "./appconfig";

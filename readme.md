@@ -1,3 +1,20 @@
+# Build
+```sh
+# Install
+npm i
+
+# Build native modules
+# After building once you will find cpp project files for visual studio/xcode depending on your platform
+npm run uibuild
+
+# Build 
+npm run watch
+
+# Run
+npm run ui
+```
+
+
 # Alt1Lite (name pending)
 This project is a experimental rewrite of the Alt1 Toolkit in Typescript Electron and React. It is not clear yet if this could become a replacement of C# Alt1.
 
