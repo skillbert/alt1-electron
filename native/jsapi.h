@@ -50,8 +50,8 @@ void CaptureWindowMultiAuto(OSWindow wnd, CaptureMode mode, vector<CaptureRect> 
 		}
 		auto pixeldata = OpenGLCapture::CaptureMultiple(handle, &rawrects[0], rawrects.size());
 		if (!pixeldata) {
-			char errtext[200];
-			int len = OpenGLCapture::GetDebug(errtext, sizeof(errtext));
+			char errtext[200] = { 0 };
+			int len = OpenGLCapture::GetDebug(errtext, sizeof(errtext)-1);
 			Napi::Error::New(env, string() + "Failed to capture, native error: " + errtext).ThrowAsJavaScriptException();
 		}
 		//TODO get rid of copy somehow? (src memory is shared ipc memory so not trivial)
