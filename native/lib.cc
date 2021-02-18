@@ -4,9 +4,7 @@
 
 //TODO remove
 Napi::Value test(const Napi::CallbackInfo& info) {
-	bool loss;
-	auto val = info[0].As<Napi::BigInt>().Uint64Value(&loss);
-	return Napi::Boolean::New(info.Env(), loss);
+	throw Napi::Error::New(info.Env(), string(info[0].As<Napi::String>()));
 }
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {

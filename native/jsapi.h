@@ -8,7 +8,7 @@
 enum class CaptureMode { Desktop = 0, Window = 1, OpenGL = 2 };
 const char* captureModeText[] = { "desktop","window","opengl" };
 
-CaptureMode capturemode = CaptureMode::Window;
+CaptureMode capturemode = CaptureMode::OpenGL;
 
 std::map<OSWindow, OpenGLCapture::HookedProcess*> hookedWindows;
 
@@ -24,7 +24,7 @@ void CaptureWindowMultiAuto(OSWindow wnd, CaptureMode mode, vector<CaptureRect> 
 	for (const auto& capt : rects) {
 		if (capt.rect.width <= 0 || capt.rect.height <= 0 || capt.rect.width > 1e4 || capt.rect.height > 1e4)
 		{
-			Napi::TypeError::New(env, "invalid capture size").ThrowAsJavaScriptException();
+			throw Napi::TypeError::New(env, "invalid capture size");
 		}
 	}
 	switch (mode) {
@@ -51,19 +51,21 @@ void CaptureWindowMultiAuto(OSWindow wnd, CaptureMode mode, vector<CaptureRect> 
 		auto pixeldata = OpenGLCapture::CaptureMultiple(handle, &rawrects[0], rawrects.size());
 		if (!pixeldata) {
 			char errtext[200] = { 0 };
-			int len = OpenGLCapture::GetDebug(errtext, sizeof(errtext)-1);
-			Napi::Error::New(env, string() + "Failed to capture, native error: " + errtext).ThrowAsJavaScriptException();
+			int len = OpenGLCapture::GetDebug(errtext, sizeof(errtext) - 1);
+			throw Napi::Error::New(env, string() + "Failed to capture, native error: " + errtext);
 		}
 		//TODO get rid of copy somehow? (src memory is shared ipc memory so not trivial)
 		size_t offset = 0;
 		for (int i = 0; i < rects.size(); i++) {
-			memcpy(rects[i].data, pixeldata + offset, rects[i].size);
-			offset += rawrects[i].width * rawrects[i].height * 4;
+			//TODO use correct pixel format in injectdll so this flip isnt needed
+			//copy and flip
+			flipBGRAtoRGBA(rects[i].data, pixeldata + offset, rects[i].size);
+			offset += (size_t)rawrects[i].width * rawrects[i].height * 4;
 		}
 		break;
 	}
 	default:
-		Napi::RangeError::New(env, "No capture mode selected").ThrowAsJavaScriptException();
+		throw Napi::RangeError::New(env, "No capture mode selected");
 	}
 }
 
@@ -145,7 +147,7 @@ void NewWindowListener(const Napi::CallbackInfo& info) {
 	Napi::Function cb = info[2].As<Napi::Function>();
 	auto typefind= windowEventTypes.find(typestring);
 	if (typefind == windowEventTypes.end()) {
-		Napi::RangeError::New(info.Env(), "unknown event type").ThrowAsJavaScriptException();
+		throw Napi::RangeError::New(info.Env(), "unknown event type");
 	}
 	OSNewWindowListener(wnd, typefind->second, cb);
 }
@@ -156,7 +158,7 @@ void RemoveWindowListener(const Napi::CallbackInfo& info) {
 	Napi::Function cb = info[2].As<Napi::Function>();
 	auto typefind = windowEventTypes.find(typestring);
 	if (typefind == windowEventTypes.end()) {
-		Napi::RangeError::New(info.Env(), "unknown event type").ThrowAsJavaScriptException();
+		throw Napi::RangeError::New(info.Env(), "unknown event type");
 	}
 	OSRemoveWindowListener(wnd, typefind->second, cb);
 }

@@ -47,7 +47,7 @@ OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
 	auto handle = jsval.As<Napi::BigInt>();
 	bool lossless;
 	auto handleint = handle.Uint64Value(&lossless);
-	if (!lossless) { Napi::RangeError::New(jsval.Env(), "Invalid handle").ThrowAsJavaScriptException(); }
+	if (!lossless) { throw Napi::RangeError::New(jsval.Env(), "Invalid handle"); }
 	return OSWindow((HWND)handleint);
 }
 
@@ -135,18 +135,6 @@ void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
 	}
 	//TODO there was a reason to do this instead of using the nicely named SetParent window, find out why
 	SetWindowLongPtr(wnd.hwnd, GWLP_HWNDPARENT, (uint64_t)parent.hwnd);
-}
-
-//TODO this is stupid
-void flipBGRAtoRGBA(void* data, size_t len) {
-	unsigned char* index = (unsigned char*)data;
-	unsigned char* end = index + len;
-	for (; index < end; index += 4) {
-		unsigned char tmp = index[0];
-		//TODO profile this, does the compiler do fancy simd swizzles if we self assign 1 and 3 as well?
-		index[0] = index[2];
-		index[2] = tmp;
-	}
 }
 
 void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y, int w, int h) {

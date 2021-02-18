@@ -5,9 +5,10 @@ npm i
 
 # Build native modules
 # After building once you will find cpp project files for visual studio/xcode depending on your platform
-npm run uibuild
+# You can then build and debug using that project and IDE
+npm run native
 
-# Build 
+# auto-build typescript/webpack
 npm run watch
 
 # Run
@@ -70,3 +71,15 @@ This has been the most long standing request. Starting from scratch with other p
 - Clean up native event situation for windows
 - Enable contextisolation in appwindow
 - Think some more about the name
+
+# Extension projects
+These concepts don't exist in C# Alt1 but are now possible.
+
+### Background apps
+App functionality that runs without the app being visible using service workers.
+
+### Native acceleration plugin
+Direct access to js runtime and memory of arraybuffers is now possible. Possibly capture directly into app controlled memory and implement c++ accelerated image detect fast paths.
+
+### Different app styles
+Support for Guide style apps that are easy to minimize and take up the center screen. 2 years ago RS Pocketbook was interested in merging into Alt1 like this, others are also possible.
