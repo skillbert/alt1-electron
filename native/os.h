@@ -1,6 +1,13 @@
 #pragma once
 
 #include "util.h"
+#ifdef OS_WIN
+#include "os_win.h"
+#elif OS_LINUX
+#include "os_x11_linux.h"
+#else
+#error Platform not supported
+#endif
 
 
 struct CaptureRect {
@@ -25,20 +32,21 @@ public:
 	string GetTitle();
 	Napi::Value ToJS(Napi::Env env);
 
-	static OSWindow OSWindow::FromJsValue(const Napi::Value jsval);
+	static OSWindow FromJsValue(const Napi::Value jsval);
 
-	bool operator==(const OSWindow& other)const = default;
+	bool operator==(const OSWindow& other)const { return this->hwnd == other.hwnd; };
 	bool operator<(const OSWindow& other) const { return this->hwnd < other.hwnd; }
 };
 
-vector<uint32_t> OSGetProcessesByName(std::wstring name, uint32_t parentpid);
+vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid);
 
 OSWindow OSFindMainWindow(unsigned long process_id);
+void OSSetWindowParent(OSWindow wnd, OSWindow parent);
 
 void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h);
 void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y, int w, int h);
 void OSCaptureDesktopMulti(vector<CaptureRect> rects);
-void OSCaptureWindowMulti(vector<CaptureRect> rects);
+void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects);
 string OSGetProcessName(int pid);
 
 

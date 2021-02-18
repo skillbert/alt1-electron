@@ -1,8 +1,5 @@
-
-//TODO find the actual defines that node-gyp uses
-#ifdef WIN32
-#include "oswin.h"
-#endif
+#include <map>
+#include "os.h"
 
 
 enum class CaptureMode { Desktop = 0, Window = 1, OpenGL = 2 };
@@ -10,14 +7,20 @@ const char* captureModeText[] = { "desktop","window","opengl" };
 
 CaptureMode capturemode = CaptureMode::Window;
 
+#ifdef OPENGL_SUPPORTED
 std::map<OSWindow, OpenGLCapture::HookedProcess*> hookedWindows;
+#endif
 
 Napi::Value HookWindow(const Napi::CallbackInfo& info) {
+#ifdef OPENGL_SUPPORTED
 	auto wnd = OSWindow::FromJsValue(info[0]);
 
 	auto handle = OpenGLCapture::HookProcess(wnd.hwnd);
 	hookedWindows[wnd] = handle;
 	return Napi::BigInt::New(info.Env(), (uintptr_t)handle);
+#else
+	return Napi::BigInt::New(info.Env(), (uint64_t) 0);
+#endif
 }
 
 void CaptureWindowMultiAuto(OSWindow wnd, CaptureMode mode, vector<CaptureRect> rects, Napi::Env env) {
@@ -43,6 +46,7 @@ void CaptureWindowMultiAuto(OSWindow wnd, CaptureMode mode, vector<CaptureRect> 
 		OSCaptureWindowMulti(wnd, rects);
 		break;
 	case CaptureMode::OpenGL: {
+#ifdef OPENGL_SUPPORTED
 		auto handle = OpenGLCapture::HookProcess(wnd.hwnd);
 		vector<JSRectangle> rawrects(rects.size());
 		for (int i = 0; i < rects.size(); i++) {
@@ -61,6 +65,10 @@ void CaptureWindowMultiAuto(OSWindow wnd, CaptureMode mode, vector<CaptureRect> 
 			offset += rawrects[i].width * rawrects[i].height * 4;
 		}
 		break;
+#else
+		Napi::Error::New(env, "OpenGL capture not supported on this platform").ThrowAsJavaScriptException();
+		break;
+#endif
 	}
 	default:
 		Napi::RangeError::New(env, "No capture mode selected").ThrowAsJavaScriptException();
