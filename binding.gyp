@@ -1,4 +1,7 @@
 {
+	"variables": {
+		"pkg-config": "pkg-config"
+	},
 	"targets": [
 		{
 			"target_name": "addon",
@@ -36,6 +39,27 @@
 				['OS=="linux"', {
 					"defines": [
 						'OS_LINUX',
+					],
+					'cflags': [
+						'<!@(<(pkg-config) --cflags xcb)',
+						'<!@(<(pkg-config) --cflags xcb-ewmh)',
+						'<!@(<(pkg-config) --cflags xcb-shm)',
+						'<!@(<(pkg-config) --cflags xcb-composite)',
+						'<!@(<(pkg-config) --cflags libprocps)'
+					],
+					'ldflags': [
+						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb)',
+						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb-ewmh)',
+						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb-shm)',
+						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb-composite)',
+						'<!@(<(pkg-config) --libs-only-L --libs-only-other libprocps)'
+					],
+					'libraries': [
+						'<!@(<(pkg-config) --libs-only-l xcb)',
+						'<!@(<(pkg-config) --libs-only-l xcb-ewmh)',
+						'<!@(<(pkg-config) --libs-only-l xcb-shm)',
+						'<!@(<(pkg-config) --libs-only-l xcb-composite)',
+						'<!@(<(pkg-config) --libs-only-l libprocps)'
 					],
 					"cflags_cc": [ "-std=c++17" ],
 				}],

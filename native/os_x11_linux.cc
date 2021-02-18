@@ -1,10 +1,13 @@
+#include <unistd.h>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
 #include <map>
+#include <iostream> // cout
 #include <napi.h>
 #include <xcb/xcb.h>
 #include <xcb/xcb_ewmh.h>
+#include <proc/readproc.h>
 #include "os.h"
 
 namespace priv_os_x11 {
@@ -51,7 +54,7 @@ namespace priv_os_x11 {
 		conn_mtx.unlock();
 	}
 
-	xcb_atom_t getAtom(const char* name){
+	xcb_atom_t getAtom(const char* name){ // FIXME: Unused?
 		std::string nameStr = std::string(name);
 
 		atoms_mtx.lock_shared();
@@ -80,6 +83,20 @@ namespace priv_os_x11 {
 
 using namespace priv_os_x11;
 
+void OSWindow::SetBounds(JSRectangle bounds) {
+	// TODO
+}
+
+JSRectangle OSWindow::GetBounds() {
+	// TODO: Add window decorator size
+	return this->GetClientBounds();
+}
+
+JSRectangle OSWindow::GetClientBounds() {
+	// TODO
+	return JSRectangle();
+}
+
 int OSWindow::GetPid() {
 	ensureConnection();
 	xcb_get_property_cookie_t cookie = xcb_ewmh_get_wm_pid(&ewmhConnection, this->hwnd);
@@ -91,6 +108,32 @@ int OSWindow::GetPid() {
 	return int(pid);
 }
 
+bool OSWindow::IsValid() {
+	if (!hwnd) {
+		return false;
+	}
+	// TODO
+	return true;
+}
+
+std::string OSWindow::GetTitle() {
+	ensureConnection();
+	xcb_get_property_cookie_t cookie = xcb_get_property_unchecked(connection, 0, this->hwnd, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 0, 100);
+	std::unique_ptr<xcb_get_property_reply_t, decltype(&free)> reply { xcb_get_property_reply(connection, cookie, NULL), &free };
+	if (!reply) {
+		return std::string();
+	}
+
+	char* title = reinterpret_cast<char*>(xcb_get_property_value(reply.get()));
+	int length = xcb_get_property_value_length(reply.get());
+
+	return std::string(title, length);
+}
+
+Napi::Value OSWindow::ToJS(Napi::Env env) {
+	return Napi::BigInt::New(env, (uint64_t) this->hwnd);
+}
+
 OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
 	auto handle = jsval.As<Napi::BigInt>();
 	bool lossless;
@@ -99,4 +142,74 @@ OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
 		Napi::RangeError::New(jsval.Env(), "Invalid handle").ThrowAsJavaScriptException();
 	}
 	return OSWindow(handleint);
+}
+
+std::vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid) {
+	std::vector<uint32_t> out;
+	
+	uid_t uidlist[1] = {getuid()};
+	std::unique_ptr<PROCTAB, decltype(&closeproc)> proctab = { openproc(PROC_FILLSTAT | PROC_UID, uidlist, 1), &closeproc };
+
+	// FIXME: Move this to ts
+	if (name == "rs2client.exe") {
+		name = "rs2client";
+	}
+	
+	proc_t data = {};
+	while (readproc(proctab.get(), &data) != NULL) {
+		if (parentpid != 0 && parentpid != (uint32_t) data.ppid) {
+			continue;
+		}
+		if (name.compare(data.cmd) != 0) {
+			continue;
+		}
+		out.push_back(data.tgid);
+	}
+	
+	return out;
+}
+
+OSWindow OSFindMainWindow(unsigned long process_id) {
+	// TODO
+	std::cout << "OSFindMainWindow" << std::endl;
+	return OSWindow();
+}
+
+void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
+	// TODO
+}
+
+void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h) {
+	// TODO
+}
+
+void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y, int w, int h) {
+	// TODO
+}
+
+void OSCaptureDesktopMulti(vector<CaptureRect> rects) {
+	// TODO
+}
+void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects) {
+	// TODO
+}
+
+std::string OSGetProcessName(int pid) {
+	pid_t pidlist[2] = {pid, 0};
+	std::unique_ptr<PROCTAB, decltype(&closeproc)> proctab = { openproc(PROC_FILLSTAT | PROC_PID, pidlist), &closeproc };
+
+	proc_t data = {};
+	if (readproc(proctab.get(), &data) == NULL) {
+		return std::string();
+	}
+
+	return std::string(data.cmd);
+}
+
+void OSNewWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) {
+
+}
+
+void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) {
+
 }
