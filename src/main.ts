@@ -13,15 +13,12 @@ import { OverlayCommand, Rectangle } from "./shared";
 import { Bookmark, loadSettings, saveSettings, settings } from "./settings";
 import { boundMethod } from "autobind-decorator";
 
-
 // try {
-// 	console.log(test(BigInt(-1)));
+// 	console.log(native.test("asdd"));
 // } catch (e) {
-// 	console.log(e + "");
+// 	console.log("err: " + e);
 // }
 // process.exit();
-
-
 
 
 (global as any).native = require("./native");
@@ -34,8 +31,6 @@ var tray: Tray | null = null;
 var alt1icon = nativeImage.createFromPath(relPath(require("!file-loader!./imgs/alt1icon.png").default));
 
 
-//TODO this is needed for current native module, need to make it context aware
-//app.allowRendererProcessReuse = false;
 const originalCwd = process.cwd();
 process.chdir(__dirname);
 if (!app.requestSingleInstanceLock()) { app.exit(); }
@@ -46,8 +41,6 @@ loadSettings();
 app.on("before-quit", e => {
 	rsInstances.forEach(c => c.close());
 	saveSettings();
-	//needed for restart
-	process.chdir(originalCwd);
 });
 app.on("second-instance", (e, argv, cwd) => handleSchemeArgs(argv));
 app.on('window-all-closed', e => e.preventDefault());
@@ -101,18 +94,6 @@ class ManagedWindow {
 			managedWindows.splice(managedWindows.indexOf(this), 1);
 			this.windowPin.unpin();
 		});
-		//this would create a feedback loop
-		// this.window.on("resized", () => this.windowPin.updateDocking());
-		// this.window.on("moved", () => this.windowPin.updateDocking());
-		// this.window.on("move", console.log.bind(console));
-		// this.window.on("resize", console.log.bind(console));
-		// this.window.on("moved", console.log.bind(console));
-		// this.window.on("resized", console.log.bind(console));
-		//setparentwindow doesnt work
-		// this.window.webContents.on("devtools-opened", e => {
-		// 	let wnd = (this.window.webContents.devToolsWebContents as any).getOwnerBrowserWindow();
-		// 	wnd!.setParentWindow(this.window);
-		// });
 
 		managedWindows.push(this);
 	}
@@ -165,7 +146,7 @@ function initIpcApi() {
 	ipcMain.on("identifyapp", async (e, configurl) => {
 		try {
 			let url = sameDomainResolve(e.sender.getURL(), configurl);
-			identifyApp(url);
+			await identifyApp(url);
 		} catch (e) {
 			console.error(e);
 		}

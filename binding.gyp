@@ -22,6 +22,9 @@
 			"msvs_settings": {
 				"VCCLCompilerTool": { "ExceptionHandling": 1 },
 			},
+			"defines": [
+				"NAPI_CPP_EXCEPTIONS"
+			],
 			"conditions": [
 				['OS=="win"', {
 					"defines": [

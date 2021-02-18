@@ -128,7 +128,8 @@ var alt1api: Partial<typeof alt1> = {
 	overLayClearGroup(groupid) { queueOverlayCommand({ command: "cleargroup", groupid }); },
 	overLayRefreshGroup(groupid) { queueOverlayCommand({ command: "refreshgroup", groupid }); },
 	setTooltip(str) { return true; },
-	clearTooltip() { alt1api.setTooltip!(""); }
+	clearTooltip() { alt1api.setTooltip!(""); },
+
 };
 
 //API extension for fast capture
@@ -172,7 +173,11 @@ Object.defineProperties(alt1api, {
 	rsWidth: { get() { return getRsInfo()?.width || 0; } },
 	rsHeight: { get() { return getRsInfo()?.height || 0; } },
 	rsLinked: { get() { return true; } },
-	currentWorld: { get() { return 1; } }
+	currentWorld: { get() { return 1; } },
+	permissionGameState: { get() { return true; } },
+	permissionInstalled: { get() { return true; } },
+	permissionOverlay: { get() { return true; } },
+	permissionPixel: { get() { return true; } }
 });
 
 Object.assign(alt1api, extendedapi);
