@@ -3,8 +3,9 @@
 		{
 			"target_name": "addon",
 			"sources": [
-				"./native/os_x11_linux.cc",
 				"./native/lib.cc",
+				"./native/util.cc",
+				"./native/os_x11_linux.cc",
 			],
 			"include_dirs": [
 				"<!@(node -p \"require('node-addon-api').include\")"

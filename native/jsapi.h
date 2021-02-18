@@ -5,7 +5,11 @@
 enum class CaptureMode { Desktop = 0, Window = 1, OpenGL = 2 };
 const char* captureModeText[] = { "desktop","window","opengl" };
 
+#ifdef OPENGL_SUPPORTED
 CaptureMode capturemode = CaptureMode::OpenGL;
+#else
+CaptureMode capturemode = CaptureMode::Window;
+#endif
 
 #ifdef OPENGL_SUPPORTED
 std::map<OSWindow, OpenGLCapture::HookedProcess*> hookedWindows;
@@ -124,9 +128,9 @@ Napi::Value GetProcessMainWindow(const Napi::CallbackInfo& info) {
 
 Napi::Value GetProcessesByName(const Napi::CallbackInfo& info) {
 	string name = info[0].As<Napi::String>().Utf8Value();
-	auto pids = OSGetProcessesByName(name, NULL);
+	auto pids = OSGetProcessesByName(name, 0);
 	auto ret = Napi::Array::New(info.Env(), pids.size());
-	for (int i = 0; i < pids.size(); i++) { ret.Set(i, pids[i]); }
+	for (size_t i = 0; i < pids.size(); i++) { ret.Set(i, pids[i]); }
 	return ret;
 }
 
