@@ -1,100 +1,51 @@
 #include <unistd.h>
 #include <memory>
-#include <mutex>
-#include <shared_mutex>
-#include <map>
-#include <iostream> // cout
+#include <iostream>
 #include <napi.h>
-#include <xcb/xcb.h>
-#include <xcb/xcb_ewmh.h>
 #include <proc/readproc.h>
 #include "os.h"
-
-namespace priv_os_x11 {
-	xcb_connection_t* connection;
-	xcb_window_t rootWindow;
-	xcb_ewmh_connection_t ewmhConnection;
-
-	std::mutex conn_mtx;
-	std::map<std::string, xcb_atom_t> atoms;
-	std::shared_mutex atoms_mtx;
-
-	/**
-	 * Ensure that we have connection to X11
-	 */
-	void ensureConnection() {
-		if (connection != NULL) {
-			return;
-		}
-
-		conn_mtx.lock();
-		// check again with lock
-		if (connection != NULL) {
-			conn_mtx.unlock();
-			return;
-		}
-
-		connection = xcb_connect(NULL, NULL);
-		if (xcb_connection_has_error(connection)) {
-			conn_mtx.unlock();
-			throw new std::runtime_error("Cannot initiate xcb connection");
-		}
-	
-		xcb_screen_t *screen = xcb_setup_roots_iterator(xcb_get_setup(connection)).data;
-		if (!screen) {
-			conn_mtx.unlock();
-			throw new std::runtime_error("Cannot iterate screens");
-		}
-		rootWindow = screen->root;
-		if (xcb_ewmh_init_atoms_replies(&ewmhConnection, xcb_ewmh_init_atoms(connection, &ewmhConnection), NULL) == 0) {
-			conn_mtx.unlock();
-			throw new std::runtime_error("Cannot prepare ewmh atoms");
-		}
-
-		conn_mtx.unlock();
-	}
-
-	xcb_atom_t getAtom(const char* name){ // FIXME: Unused?
-		std::string nameStr = std::string(name);
-
-		atoms_mtx.lock_shared();
-		if (atoms.find(nameStr) != atoms.end()) {
-			xcb_atom_t out = atoms[nameStr];
-			atoms_mtx.unlock_shared();
-			return out;
-		}
-
-		atoms_mtx.unlock_shared();
-		ensureConnection();
-		atoms_mtx.lock();
-		xcb_intern_atom_cookie_t cookie = xcb_intern_atom(connection, true, strlen(name), name);
-		std::unique_ptr<xcb_intern_atom_reply_t, decltype(&free)> reply { xcb_intern_atom_reply(connection, cookie, NULL), &free };
-		if (!reply) {
-			atoms_mtx.unlock();
-			throw std::runtime_error("fail to get atom");
-		}
-
-		atoms[nameStr] = reply->atom;
-		atoms_mtx.unlock();
-
-		return reply->atom;
-	}
-}
+#include "linux/x11.h"
 
 using namespace priv_os_x11;
 
 void OSWindow::SetBounds(JSRectangle bounds) {
-	// TODO
+	ensureConnection();
+	xcb_configure_window_value_list_t config = {
+		.x = bounds.x,
+		.y = bounds.y,
+		.width = (uint32_t) bounds.width,
+		.height = (uint32_t) bounds.height,
+		0, 0, 0
+	};
+
+	xcb_configure_window_aux(connection, this->hwnd, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, &config);
 }
 
 JSRectangle OSWindow::GetBounds() {
-	// TODO: Add window decorator size
-	return this->GetClientBounds();
+	ensureConnection();
+	xcb_query_tree_cookie_t cookie = xcb_query_tree_unchecked(connection, this->hwnd);
+	std::unique_ptr<xcb_query_tree_reply_t, decltype(&free)> reply { xcb_query_tree_reply(connection, cookie, NULL), &free };
+	if (!reply) {
+		return JSRectangle();
+	}
+
+	if (reply->parent == reply->root) {
+		// not reparented to wm - probably has no border
+		return this->GetClientBounds();
+	}
+
+	return OSWindow(reply->parent).GetClientBounds();
 }
 
 JSRectangle OSWindow::GetClientBounds() {
-	// TODO
-	return JSRectangle();
+	ensureConnection();
+	xcb_get_geometry_cookie_t cookie = xcb_get_geometry_unchecked(connection, this->hwnd);
+	std::unique_ptr<xcb_get_geometry_reply_t, decltype(&free)> reply { xcb_get_geometry_reply(connection, cookie, NULL), &free };
+	if (!reply) { 
+		return JSRectangle();
+	}
+
+	return JSRectangle(reply->x, reply->y, reply->width, reply->height);
 }
 
 int OSWindow::GetPid() {
@@ -112,8 +63,11 @@ bool OSWindow::IsValid() {
 	if (!hwnd) {
 		return false;
 	}
-	// TODO
-	return true;
+
+	ensureConnection();
+	xcb_get_geometry_cookie_t cookie = xcb_get_geometry_unchecked(connection, this->hwnd);
+	std::unique_ptr<xcb_get_geometry_reply_t, decltype(&free)> reply { xcb_get_geometry_reply(connection, cookie, NULL), &free };
+	return !!reply;
 }
 
 std::string OSWindow::GetTitle() {
@@ -169,29 +123,44 @@ std::vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid)
 	return out;
 }
 
+// TODO: Make this nullable
 OSWindow OSFindMainWindow(unsigned long process_id) {
-	// TODO
-	std::cout << "OSFindMainWindow" << std::endl;
-	return OSWindow();
+	ensureConnection();
+	std::vector<xcb_window_t> windows = findWindowsWithPid((pid_t) process_id);
+
+	if (windows.size() == 0){
+		return OSWindow(0);
+	}
+
+	return OSWindow(windows[0]);
 }
 
 void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
-	// TODO
+	ensureConnection();
+	// This does not work:
+	// 1. It show up on screenshot
+	// 2. It break setbounds somehow
+	// 3. Resizing doesn't work as it don't use setbounds
+	// xcb_reparent_window(connection, wnd.hwnd, parent.hwnd, 0, 0);
 }
 
 void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h) {
 	// TODO
+	ensureConnection();
 }
 
 void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y, int w, int h) {
 	// TODO
+	ensureConnection();
 }
 
 void OSCaptureDesktopMulti(vector<CaptureRect> rects) {
 	// TODO
+	ensureConnection();
 }
 void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects) {
 	// TODO
+	ensureConnection();
 }
 
 std::string OSGetProcessName(int pid) {

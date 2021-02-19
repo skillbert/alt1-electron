@@ -3,6 +3,7 @@ import * as fs from "fs";
 import { Rectangle } from "./shared";
 import { boundMethod } from "autobind-decorator";
 import { TypedEmitter } from "./typedemitter";
+import { toBigIntLE } from "bigint-buffer";
 
 //Copy the addon file so we can rebuild while alt1lite is already running
 let addonpath = path.resolve(__dirname, "../build/Debug/");
@@ -38,9 +39,9 @@ type windowEvents = {
 
 export class OSWindow {
 	handle: BigInt;
-	constructor(handle: BigInt | Uint8Array) {
-		if (handle instanceof Uint8Array) {
-			this.handle = new BigUint64Array(handle.buffer, handle.byteOffset, handle.byteLength / BigUint64Array.BYTES_PER_ELEMENT)[0];
+	constructor(handle: BigInt | Buffer) {
+		if (handle instanceof Buffer) {
+			this.handle = toBigIntLE(handle);
 		} else if (typeof handle == "bigint") {
 			this.handle = handle;
 		}

@@ -40,6 +40,9 @@
 					"defines": [
 						'OS_LINUX',
 					],
+					"sources": [
+						"./native/linux/x11.cc"
+					],
 					'cflags': [
 						'<!@(<(pkg-config) --cflags xcb)',
 						'<!@(<(pkg-config) --cflags xcb-ewmh)',

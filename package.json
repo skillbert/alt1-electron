@@ -42,6 +42,7 @@
 		"@alt1/base": "0.0.10",
 		"@alt1/ocr": "0.0.10",
 		"autobind-decorator": "^2.4.0",
+		"bigint-buffer": "^1.1.5",
 		"classnames": "^2.2.6",
 		"electron": "^11.2.1",
 		"node-fetch": "^2.6.1",
