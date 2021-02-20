@@ -66,8 +66,7 @@
 						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb-ewmh)',
 						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb-shm)',
 						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb-composite)',
-						'<!@(<(pkg-config) --libs-only-L --libs-only-other libprocps)',
-						'-lrt'
+						'<!@(<(pkg-config) --libs-only-L --libs-only-other libprocps)'
 					],
 					'libraries': [
 						'<!@(<(pkg-config) --libs-only-l xcb)',
