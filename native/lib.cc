@@ -8,8 +8,6 @@ Napi::Value test(const Napi::CallbackInfo& info) {
 }
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
-
-	OpenGLCapture::init();
 	auto inst = new PluginInstance();
 	//TODO need delete destructor to get rid of the mem again?
 	env.SetInstanceData<>(inst);

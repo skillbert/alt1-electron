@@ -10,12 +10,12 @@ const char* captureModeText[] = { "desktop","window","opengl" };
 
 CaptureMode capturemode = CaptureMode::OpenGL;
 
-std::map<OSWindow, OpenGLCapture::HookedProcess*> hookedWindows;
+std::map<OSWindow, Alt1Native::HookedProcess*> hookedWindows;
 
 Napi::Value HookWindow(const Napi::CallbackInfo& info) {
 	auto wnd = OSWindow::FromJsValue(info[0]);
 
-	auto handle = OpenGLCapture::HookProcess(wnd.hwnd);
+	auto handle = Alt1Native::HookProcess(wnd.hwnd);
 	hookedWindows[wnd] = handle;
 	return Napi::BigInt::New(info.Env(), (uintptr_t)handle);
 }
@@ -43,15 +43,15 @@ void CaptureWindowMultiAuto(OSWindow wnd, CaptureMode mode, vector<CaptureRect> 
 		OSCaptureWindowMulti(wnd, rects);
 		break;
 	case CaptureMode::OpenGL: {
-		auto handle = OpenGLCapture::HookProcess(wnd.hwnd);
+		auto handle = Alt1Native::HookProcess(wnd.hwnd);
 		vector<JSRectangle> rawrects(rects.size());
 		for (int i = 0; i < rects.size(); i++) {
 			rawrects[i] = rects[i].rect;
 		}
-		auto pixeldata = OpenGLCapture::CaptureMultiple(handle, &rawrects[0], rawrects.size());
+		auto pixeldata = Alt1Native::CaptureMultiple(handle, &rawrects[0], rawrects.size());
 		if (!pixeldata) {
 			char errtext[200] = { 0 };
-			int len = OpenGLCapture::GetDebug(errtext, sizeof(errtext) - 1);
+			int len = Alt1Native::GetDebug(errtext, sizeof(errtext) - 1);
 			throw Napi::Error::New(env, string() + "Failed to capture, native error: " + errtext);
 		}
 		//TODO get rid of copy somehow? (src memory is shared ipc memory so not trivial)
