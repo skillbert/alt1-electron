@@ -41,7 +41,8 @@
 						'OS_LINUX',
 					],
 					"sources": [
-						"./native/linux/x11.cc"
+						"./native/linux/x11.cc",
+						"./native/linux/shm.cc"
 					],
 					'cflags': [
 						'<!@(<(pkg-config) --cflags xcb)',
@@ -55,7 +56,8 @@
 						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb-ewmh)',
 						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb-shm)',
 						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb-composite)',
-						'<!@(<(pkg-config) --libs-only-L --libs-only-other libprocps)'
+						'<!@(<(pkg-config) --libs-only-L --libs-only-other libprocps)',
+						'-lrt'
 					],
 					'libraries': [
 						'<!@(<(pkg-config) --libs-only-l xcb)',
