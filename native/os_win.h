@@ -5,7 +5,7 @@
 #include <TlHelp32.h>
 typedef HWND OSRawWindow;
 #include "os.h"
-#include "openglcapture/defs.h"
+#include "../libs/Alt1Native.h"
 
 /*
 * Currently using the Ansi version of windows api's as v8 expects utf8, this will work for ascii but will garble anything outside ascii

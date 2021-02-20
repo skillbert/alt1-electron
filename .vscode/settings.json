@@ -68,6 +68,16 @@
 		"typeinfo": "cpp",
 		"valarray": "cpp",
 		"variant": "cpp",
-		"shared_mutex": "cpp"
+		"shared_mutex": "cpp",
+		"csignal": "cpp",
+		"any": "cpp",
+		"strstream": "cpp",
+		"bitset": "cpp",
+		"complex": "cpp",
+		"future": "cpp",
+		"iomanip": "cpp",
+		"cfenv": "cpp",
+		"typeindex": "cpp",
+		"*.ipp": "cpp"
 	}
 }

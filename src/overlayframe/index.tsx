@@ -15,7 +15,6 @@ let ctx = cnv.getContext("2d")!;
 let redrawtimer = 0;
 let shutdowntimer = 0;
 const shutdowntimeout = 30 * 1000;
-//js uses center of pixel definition
 
 window.addEventListener("resize", e => redraw(Date.now(), true));
 
@@ -130,6 +129,7 @@ function redraw(now: number, force = false) {
 	if (force || currentnextupdate <= now) {
 		cnv.width = cnv.clientWidth;
 		cnv.height = cnv.clientHeight;
+		//js uses center of pixel definition
 		ctx.translate(0.5, 0.5);
 
 		for (let g of groupstates) {
