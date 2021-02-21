@@ -48,12 +48,11 @@ namespace priv_os_x11 {
 
 		size_t targetPos = 0;
 		for (int row = y; row < y + h; row++) {
-			// XXX: Can we make this memcpy and just fill in alpha afterwards?
 			for (int col = x; col < x + w; col++) {
 				int pos = ((row * this->geometry->width) + col) * 4;
-				target[targetPos++] = this->shm[pos];
-				target[targetPos++] = this->shm[pos + 1];
 				target[targetPos++] = this->shm[pos + 2];
+				target[targetPos++] = this->shm[pos + 1];
+				target[targetPos++] = this->shm[pos];
 				target[targetPos++] = 0xFF; // alpha
 			}
 		}
