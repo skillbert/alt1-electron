@@ -16,7 +16,6 @@ namespace priv_os_x11 {
 		int shmId;
 		char* shm;
 		xcb_shm_seg_t shmSeg;
-		char name[100];
 		std::unique_ptr<xcb_get_geometry_reply_t, decltype(&free)> geometry;
 	};
 }
