@@ -5,13 +5,17 @@ import { boundMethod } from "autobind-decorator";
 import { TypedEmitter } from "./typedemitter";
 import { toBigIntLE } from "bigint-buffer";
 
-//Copy the addon file so we can rebuild while alt1lite is already running
-let addonpath = path.resolve(__dirname, "../build/Debug/");
-let tmpfile = path.resolve(addonpath, "addon" + Math.floor(Math.random() * 1000) + ".node");
-let origfile = path.resolve(addonpath, "addon.node");
-fs.copyFileSync(origfile, tmpfile);
+let nativeFile = path.resolve(__dirname, "addon.node");
 
-export const native = __non_webpack_require__(tmpfile) as {
+if (process.env.NODE_ENV !== "production") {
+	// Copy the addon file so we can rebuild while alt1lite is already running
+	let addonpath = path.resolve(__dirname, "../build/Debug/");
+	nativeFile = path.resolve(addonpath, "addon" + Math.floor(Math.random() * 1000) + ".node");
+	let origfile = path.resolve(addonpath, "addon.node");
+	fs.copyFileSync(origfile, nativeFile);
+}
+
+export const native = __non_webpack_require__(nativeFile) as {
 	captureWindow: (wnd: BigInt, x: number, y: number, w: number, h: number) => Uint8ClampedArray,
 	captureWindowMulti: <T extends { [key: string]: Rectangle | undefined | null }>(wnd: BigInt, rect: T) => { [key in keyof T]: Uint8ClampedArray },
 	getProcessMainWindow: (pid: number) => BigInt,

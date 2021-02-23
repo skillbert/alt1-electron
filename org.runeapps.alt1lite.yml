@@ -1,0 +1,68 @@
+app-id: org.runeapps.alt1lite
+runtime: org.freedesktop.Platform
+runtime-version: '20.08'
+branch: 'stable'
+sdk: org.freedesktop.Sdk
+base: org.electronjs.Electron2.BaseApp
+base-version: '20.08'
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.node14
+command: run.sh
+separate-locales: false
+finish-args:
+  - --share=ipc
+  - --socket=x11
+  - --socket=pulseaudio
+  - --share=network
+modules:
+  - name: node
+    buildsystem: simple
+    build-commands:
+      - '/usr/lib/sdk/node14/install-sdk.sh'
+  - name: alt1lite
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/node14/bin
+      env:
+        XDG_CACHE_HOME: '/run/build/alt1lite/flatpak-node/cache'
+        npm_config_nodedir: /usr/lib/sdk/node14
+        npm_config_offline: 'true'
+        npm_config_cache: '/run/build/alt1lite/flatpak-node/npm-cache'
+    sources:
+      - type: dir
+        path: dist
+        dest: main/dist/
+      - type: file
+        path: package.json
+        dest: main/
+      - type: file
+        path: binding.gyp
+        dest: main/
+      - type: dir
+        path: libs
+        dest: main/libs/
+      - type: dir
+        path: native
+        dest: main/native/
+      - type: file
+        path: package-lock.json
+        dest: main/
+      - generated-sources.json
+      - type: script
+        dest-filename: run.sh
+        commands:
+          - 'export PATH=$PATH:/app/node/bin'
+          - export NODE_ENV=production
+          - cd /app/main/
+          - exec zypak-wrapper node_modules/.bin/electron dist/alt1lite.bundle.js $*
+    build-commands:
+      - cd main && npm ci --ignore-scripts
+      - cd main && npm run nativerelease
+      - cd main && npm ci --only prod
+
+      - rm main/node_modules/electron/dist/chrome-sandbox
+      
+      - mkdir -p /app/main /app/bin
+      - cp -ra main/{dist,node_modules,package.json,package-lock.json} /app/main/
+      - cp -ra main/build/Release/addon.node /app/main/dist/
+      - install run.sh /app/bin/

@@ -306,3 +306,7 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+generated-sources.json
+.flatpak-builder/
+build-flatpak/

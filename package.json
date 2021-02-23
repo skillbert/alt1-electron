@@ -10,7 +10,8 @@
 		"ui": "electron --inspect=9228 ./dist/alt1lite.bundle.js",
 		"native": "npm run nativerelease -- --debug",
 		"nativerelease": "electron-rebuild -f alt1lite",
-		"install": "npm run native"
+		"install": "echo",
+		"flatpak": "python3 deploy/flatpak-node-generator.py --xdg-layout --electron-node-headers npm package-lock.json && npm run release && flatpak-builder --force-clean --install --user build-flatpak/ org.runeapps.alt1lite.yml"
 	},
 	"author": "",
 	"license": "ISC",
