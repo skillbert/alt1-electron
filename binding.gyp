@@ -7,8 +7,7 @@
 			"target_name": "addon",
 			"sources": [
 				"./native/lib.cc",
-				"./native/util.cc",
-				"./native/os_x11_linux.cc",
+				"./native/util.cc"
 			],
 			"include_dirs": [
 				"<!@(node -p \"require('node-addon-api').include\")"
@@ -51,6 +50,7 @@
 						'OS_LINUX',
 					],
 					"sources": [
+						"./native/os_x11_linux.cc",
 						"./native/linux/x11.cc",
 						"./native/linux/shm.cc"
 					],
@@ -76,6 +76,14 @@
 						'<!@(<(pkg-config) --libs-only-l libprocps)'
 					],
 					"cflags_cc": [ "-std=c++17" ],
+				}],
+				['OS=="mac"', {
+					"defines": [
+						'OS_MAC',
+					],
+					"sources": [
+						"./native/os_mac.mm"
+					]
 				}],
 			]
 		}

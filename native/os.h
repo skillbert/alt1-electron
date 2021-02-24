@@ -5,8 +5,14 @@
 #include "os_win.h"
 #elif OS_LINUX
 #include "os_x11_linux.h"
+#elif OS_MAC
+#include "os_mac.h"
 #else
 #error Platform not supported
+#endif
+
+#ifndef DEFAULT_OS_RAWWINDOW
+#define DEFAULT_OS_RAWWINDOW 0
 #endif
 
 
@@ -20,7 +26,7 @@ struct CaptureRect {
 
 //TODO parameter type of objectwrap
 struct OSWindow {
-	OSRawWindow hwnd = 0;
+	OSRawWindow hwnd = DEFAULT_OSRAWWINDOW;
 public:
 	OSWindow() = default;
 	OSWindow(OSRawWindow wnd) :hwnd(wnd) {}
@@ -34,8 +40,8 @@ public:
 
 	static OSWindow FromJsValue(const Napi::Value jsval);
 
-	bool operator==(const OSWindow& other)const { return this->hwnd == other.hwnd; };
-	bool operator<(const OSWindow& other) const { return this->hwnd < other.hwnd; }
+	bool operator==(const OSWindow& other) const;
+	bool operator<(const OSWindow& other) const;
 };
 
 vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid);

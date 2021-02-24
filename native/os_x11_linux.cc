@@ -90,6 +90,14 @@ Napi::Value OSWindow::ToJS(Napi::Env env) {
 	return Napi::BigInt::New(env, (uint64_t) this->hwnd);
 }
 
+bool OSWindow::operator==(const OSWindow& other) const {
+	return this->hwnd == other.hwnd;
+}
+
+bool OSWindow::operator<(const OSWindow& other) const {
+	return this->hwnd < other.hwnd;
+}
+
 OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
 	auto handle = jsval.As<Napi::BigInt>();
 	bool lossless;

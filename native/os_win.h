@@ -51,6 +51,14 @@ OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
 	return OSWindow((HWND)handleint);
 }
 
+bool OSWindow::operator==(const OSWindow& other) const {
+	return this->hwnd == other.hwnd;
+}
+
+bool OSWindow::operator<(const OSWindow& other) const {
+	return this->hwnd < other.hwnd;
+}
+
 vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid)
 {
 	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
