@@ -11,8 +11,8 @@
 #error Platform not supported
 #endif
 
-#ifndef DEFAULT_OS_RAWWINDOW
-#define DEFAULT_OS_RAWWINDOW 0
+#ifndef DEFAULT_OSRAWWINDOW
+#define DEFAULT_OSRAWWINDOW 0
 #endif
 
 
