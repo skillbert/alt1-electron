@@ -8,7 +8,7 @@
 enum class CaptureMode { Desktop = 0, Window = 1, OpenGL = 2 };
 const char* captureModeText[] = { "desktop","window","opengl" };
 
-CaptureMode capturemode = CaptureMode::OpenGL;
+CaptureMode capturemode = CaptureMode::Window;
 
 std::map<OSWindow, Alt1Native::HookedProcess*> hookedWindows;
 
@@ -122,6 +122,7 @@ Napi::Value GetProcessesByName(const Napi::CallbackInfo& info) {
 	return ret;
 }
 
+Napi::Value JSGetActiveWindow(const Napi::CallbackInfo& info) { return OSGetActiveWindow().ToJS(info.Env()); }
 Napi::Value GetProcessName(const Napi::CallbackInfo& info) { return Napi::String::New(info.Env(), OSGetProcessName(info[0].As<Napi::Number>().Uint32Value())); }
 Napi::Value GetWindowPid(const Napi::CallbackInfo& info) { return Napi::Number::New(info.Env(), OSWindow::FromJsValue(info[0]).GetPid()); }
 Napi::Value GetWindowBounds(const Napi::CallbackInfo& info) { return OSWindow::FromJsValue(info[0]).GetBounds().ToJs(info.Env()); }

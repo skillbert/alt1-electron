@@ -59,6 +59,14 @@ void flipBGRAtoRGBA(void* data, size_t len) {
 	}
 }
 
+void fillImageOpaque(void* data, size_t len) {
+	byte* index = (byte*)data;
+	byte* end = index + len;
+	for (; index < end; index += 4) {
+		index[3] = 255;
+	}
+}
+
 void flipBGRAtoRGBA(void* outdata, void* indata, size_t len) {
 	byte* inbytes = (byte*)indata;
 	byte* outbytes = (byte*)outdata;

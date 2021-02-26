@@ -11,6 +11,10 @@ typedef HWND OSRawWindow;
 * Currently using the Ansi version of windows api's as v8 expects utf8, this will work for ascii but will garble anything outside ascii
 */
 
+OSWindow OSGetActiveWindow() {
+	return OSWindow(GetForegroundWindow());
+}
+
 void OSWindow::SetBounds(JSRectangle bounds) {
 	SetWindowPos(hwnd, NULL, bounds.x, bounds.y, bounds.width, bounds.height, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
 }
@@ -159,12 +163,16 @@ void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y,
 	//TODO safeguard buffer overflow somehow
 	GetDIBits(hdc, hbDesktop, 0, h, target, (BITMAPINFO*)&bmi, DIB_RGB_COLORS);
 	flipBGRAtoRGBA(target, maxlength);
+	//TODO i don't think this was necessary in c# alt1, check if this can be skipped
+	//TODO perf merge these two loops
+	fillImageOpaque(target, maxlength);
 
 	//release everything
 	SelectObject(hDest, old);
 	ReleaseDC(NULL, hdc);
 	DeleteObject(hbDesktop);
 	DeleteDC(hDest);
+
 }
 
 Napi::Value OSWindow::ToJS(Napi::Env env) {
