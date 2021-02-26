@@ -1,10 +1,6 @@
-#pragma once
 
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
-#include <TlHelp32.h>
-typedef HWND OSRawWindow;
 #include "os.h"
+#include <TlHelp32.h>
 #include "../libs/Alt1Native.h"
 
 /*
@@ -55,6 +51,14 @@ OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
 	return OSWindow((HWND)handleint);
 }
 
+bool OSWindow::operator==(const OSWindow& other) const {
+	return this->hwnd == other.hwnd;
+}
+
+bool OSWindow::operator<(const OSWindow& other) const {
+	return this->hwnd < other.hwnd;
+}
+
 vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid)
 {
 	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -76,7 +80,7 @@ vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid)
 	return res;
 }
 
-string OSGetProcessName(uint32_t pid) {
+string OSGetProcessName(int pid) {
 	char buffer[MAX_PATH] = { 0 };
 	DWORD len = MAX_PATH;
 	HANDLE hProc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
@@ -110,7 +114,7 @@ BOOL CALLBACK WinFindMainWindow_callback(HWND handle, LPARAM lParam)
 	return FALSE;
 }
 
-OSWindow OSFindMainWindow(uint32_t process_id)
+OSWindow OSFindMainWindow(unsigned long process_id)
 {
 	WinFindMainWindow_data data;
 	data.process_id = process_id;

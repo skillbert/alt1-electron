@@ -49,9 +49,11 @@ export function getActiveWindow() {
 
 export class OSWindow {
 	handle: BigInt;
-	constructor(handle: BigInt | Uint8Array) {
-		if (handle instanceof Uint8Array) {
-			this.handle = new BigUint64Array(handle.buffer, handle.byteOffset, handle.byteLength / BigUint64Array.BYTES_PER_ELEMENT)[0];
+	constructor(handle: BigInt | Buffer) {
+		if (handle instanceof Buffer) {
+			if (handle.byteLength == 8) { this.handle = handle.readBigUInt64LE(); }
+			else if (handle.byteLength == 4) { this.handle = BigInt(handle.readUInt32LE()); }
+			else { throw new Error("unexpected handle size"); }
 		} else if (typeof handle == "bigint") {
 			this.handle = handle;
 		}

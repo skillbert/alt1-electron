@@ -15,6 +15,8 @@ npm run watch
 npm run ui
 ```
 
+## Linux dependencies
+pkg-config libxcb-dev libxcb-shm-dev libxcb-composite-dev libxcb-ewmh-dev libprocps-dev
 
 # Alt1Lite (name pending)
 This project is a experimental rewrite of the Alt1 Toolkit in Typescript Electron and React. It is not clear yet if this could become a replacement of C# Alt1.

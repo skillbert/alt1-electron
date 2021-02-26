@@ -14,7 +14,7 @@ export class UserError extends Error { }
 //export const rsClientExe = "notepad++.exe";
 export const rsClientExe = "rs2client.exe";
 export const schemestring = "alt1lite";
-export const weborigin = "http://localhost";
+export const weborigin = "https://runeapps.org";
 export const configFile = "./config.json";
 
 //needed because node-fetch tries to be correct by choking on BOM

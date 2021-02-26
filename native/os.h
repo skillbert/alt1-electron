@@ -1,6 +1,19 @@
 #pragma once
 
 #include "util.h"
+#ifdef OS_WIN
+#include "os_win.h"
+#elif OS_LINUX
+#include "os_x11_linux.h"
+#elif OS_MAC
+#include "os_mac.h"
+#else
+#error Platform not supported
+#endif
+
+#ifndef DEFAULT_OSRAWWINDOW
+#define DEFAULT_OSRAWWINDOW 0
+#endif
 
 
 struct CaptureRect {
@@ -13,7 +26,7 @@ struct CaptureRect {
 
 //TODO parameter type of objectwrap
 struct OSWindow {
-	OSRawWindow hwnd = 0;
+	OSRawWindow hwnd = DEFAULT_OSRAWWINDOW;
 public:
 	OSWindow() = default;
 	OSWindow(OSRawWindow wnd) :hwnd(wnd) {}
@@ -25,20 +38,21 @@ public:
 	string GetTitle();
 	Napi::Value ToJS(Napi::Env env);
 
-	static OSWindow OSWindow::FromJsValue(const Napi::Value jsval);
+	static OSWindow FromJsValue(const Napi::Value jsval);
 
-	bool operator==(const OSWindow& other)const = default;
-	bool operator<(const OSWindow& other) const { return this->hwnd < other.hwnd; }
+	bool operator==(const OSWindow& other) const;
+	bool operator<(const OSWindow& other) const;
 };
 
-vector<uint32_t> OSGetProcessesByName(std::wstring name, uint32_t parentpid);
+vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid);
 
 OSWindow OSFindMainWindow(unsigned long process_id);
+void OSSetWindowParent(OSWindow wnd, OSWindow parent);
 
 void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h);
 void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y, int w, int h);
 void OSCaptureDesktopMulti(vector<CaptureRect> rects);
-void OSCaptureWindowMulti(vector<CaptureRect> rects);
+void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects);
 string OSGetProcessName(int pid);
 OSWindow OSGetActiveWindow();
 

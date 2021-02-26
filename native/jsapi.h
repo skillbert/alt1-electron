@@ -1,23 +1,29 @@
-
-//TODO find the actual defines that node-gyp uses
-#ifdef WIN32
-#include "oswin.h"
-#endif
+#include <map>
+#include "os.h"
+#include "../libs/Alt1Native.h"
 
 
 enum class CaptureMode { Desktop = 0, Window = 1, OpenGL = 2 };
 const char* captureModeText[] = { "desktop","window","opengl" };
 
+#ifdef OPENGL_SUPPORTED
+CaptureMode capturemode = CaptureMode::OpenGL;
+#else
 CaptureMode capturemode = CaptureMode::Window;
+#endif
 
 std::map<OSWindow, Alt1Native::HookedProcess*> hookedWindows;
 
 Napi::Value HookWindow(const Napi::CallbackInfo& info) {
+#ifdef OPENGL_SUPPORTED
 	auto wnd = OSWindow::FromJsValue(info[0]);
 
 	auto handle = Alt1Native::HookProcess(wnd.hwnd);
 	hookedWindows[wnd] = handle;
 	return Napi::BigInt::New(info.Env(), (uintptr_t)handle);
+#else
+	return Napi::BigInt::New(info.Env(), (uint64_t) 0);
+#endif
 }
 
 void CaptureWindowMultiAuto(OSWindow wnd, CaptureMode mode, vector<CaptureRect> rects, Napi::Env env) {
@@ -43,6 +49,7 @@ void CaptureWindowMultiAuto(OSWindow wnd, CaptureMode mode, vector<CaptureRect> 
 		OSCaptureWindowMulti(wnd, rects);
 		break;
 	case CaptureMode::OpenGL: {
+#ifdef OPENGL_SUPPORTED
 		auto handle = Alt1Native::HookProcess(wnd.hwnd);
 		vector<JSRectangle> rawrects(rects.size());
 		for (int i = 0; i < rects.size(); i++) {
@@ -63,6 +70,10 @@ void CaptureWindowMultiAuto(OSWindow wnd, CaptureMode mode, vector<CaptureRect> 
 			offset += (size_t)rawrects[i].width * rawrects[i].height * 4;
 		}
 		break;
+#else
+		Napi::Error::New(env, "OpenGL capture not supported on this platform").ThrowAsJavaScriptException();
+		break;
+#endif
 	}
 	default:
 		throw Napi::RangeError::New(env, "No capture mode selected");
@@ -116,9 +127,9 @@ Napi::Value GetProcessMainWindow(const Napi::CallbackInfo& info) {
 
 Napi::Value GetProcessesByName(const Napi::CallbackInfo& info) {
 	string name = info[0].As<Napi::String>().Utf8Value();
-	auto pids = OSGetProcessesByName(name, NULL);
+	auto pids = OSGetProcessesByName(name, 0);
 	auto ret = Napi::Array::New(info.Env(), pids.size());
-	for (int i = 0; i < pids.size(); i++) { ret.Set(i, pids[i]); }
+	for (size_t i = 0; i < pids.size(); i++) { ret.Set(i, pids[i]); }
 	return ret;
 }
 
