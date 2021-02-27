@@ -47,6 +47,6 @@ struct JSRectangle {
 	}
 };
 
-//TODO this should never be needed
+void fillImageOpaque(void* data, size_t len);
 void flipBGRAtoRGBA(void* data, size_t len);
 void flipBGRAtoRGBA(void* outdata, void* indata, size_t len);

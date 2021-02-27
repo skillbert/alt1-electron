@@ -54,6 +54,7 @@ void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y,
 void OSCaptureDesktopMulti(vector<CaptureRect> rects);
 void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects);
 string OSGetProcessName(int pid);
+OSWindow OSGetActiveWindow();
 
 
 enum WindowDragPhase { Start, Moving, End };

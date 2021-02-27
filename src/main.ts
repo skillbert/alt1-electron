@@ -5,22 +5,19 @@ import fetch from "node-fetch";
 import { BrowserView, dialog, Menu, MenuItem, Tray, webContents } from "electron/main";
 import { MenuItemConstructorOptions, nativeImage } from "electron/common";
 import { handleSchemeArgs, handleSchemeCommand } from "./schemehandler";
-import { readJsonWithBOM, relPath, rsClientExe, sameDomainResolve, schemestring, UserError, weborigin } from "./lib";
+import { patchImageDataShow, readJsonWithBOM, relPath, rsClientExe, sameDomainResolve, schemestring, weborigin } from "./lib";
 import { identifyApp } from "./appconfig";
-import { native, OSWindow, OSWindowPin } from "./native";
-import { detectInstances, RsInstance, rsInstances } from "./rsinstance";
+import { getActiveWindow, native, OSWindow, OSWindowPin, reloadAddon } from "./native";
+import { detectInstances, getActiveInstance, RsInstance, rsInstances } from "./rsinstance";
 import { OverlayCommand, Rectangle } from "./shared";
 import { Bookmark, loadSettings, saveSettings, settings } from "./settings";
-import { boundMethod } from "autobind-decorator";
-
-// try {
-// 	console.log(native.test("asdd"));
-// } catch (e) {
-// 	console.log("err: " + e);
-// }
-// process.exit();
 
 
+if (process.env.NODE_ENV === "development") {
+	patchImageDataShow();
+}
+
+//exposed on global for debugging purposes
 (global as any).native = require("./native");
 (global as any).Alt1lite = require("./main");
 
@@ -29,7 +26,6 @@ export function getManagedWindow(w: webContents) { return managedWindows.find(q 
 export function getManagedAppWindow(id: number) { return managedWindows.find(q => q.appFrameId == id); }
 var tray: Tray | null = null;
 var alt1icon = nativeImage.createFromPath(relPath(require("!file-loader!./imgs/alt1icon.png").default));
-
 
 const originalCwd = process.cwd();
 process.chdir(__dirname);
@@ -46,13 +42,27 @@ app.on("second-instance", (e, argv, cwd) => handleSchemeArgs(argv));
 app.on('window-all-closed', e => e.preventDefault());
 app.once('ready', () => {
 
-	//TODO only do this on config reset
-
-	globalShortcut.register("Alt+1", () => { });
+	globalShortcut.register("Alt+1", alt1Pressed);
 
 	drawTray();
 	initIpcApi();
 });
+
+function alt1Pressed() {
+	let rsinst = getActiveInstance();
+	try {
+		if (!rsinst) {
+			throw new Error("Alt+1 pressed but no active rs client found");
+		}
+		rsinst.alt1Pressed();
+	} catch (e) {
+		console.log("alt+1 hotkey read failed: " + e);
+	}
+}
+
+function rsRightclicked() {
+
+}
 
 export function openApp(app: Bookmark, inst?: RsInstance) {
 	if (!inst) {
@@ -116,12 +126,14 @@ function drawTray() {
 		menu.push({ label: "Exit", click: e => app.quit() });
 		menu.push({
 			label: "Restart", click: e => {
+				//relaunch uses the dir at time of call, there is no better way to give it the original dir
 				process.chdir(originalCwd);
 				app.relaunch();
 				process.chdir(__dirname);
 				app.quit();
 			}
 		});
+		menu.push({ label: "Reload native addon", click: e => { reloadAddon(); } });
 		let menuinst = Menu.buildFromTemplate(menu);
 		tray!.setContextMenu(menuinst);
 		tray!.popUpContextMenu();

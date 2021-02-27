@@ -124,10 +124,6 @@ std::vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid)
 		}
 	}
 	no_proc /= sizeof(pid_t);
-
-	if (name == "rs2client.exe") {
-		name = "rs2client"; // TODO: Move this to ts
-	}
 	
 	for (int i = 0; i < no_proc; i++) {
 		if (OSGetProcessName(buf[i]) == name) {

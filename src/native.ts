@@ -3,20 +3,15 @@ import * as fs from "fs";
 import { Rectangle } from "./shared";
 import { boundMethod } from "autobind-decorator";
 import { TypedEmitter } from "./typedemitter";
-import { toBigIntLE } from "bigint-buffer";
 
-//Copy the addon file so we can rebuild while alt1lite is already running
-let addonpath = path.resolve(__dirname, "../build/Debug/");
-let tmpfile = path.resolve(addonpath, "addon" + Math.floor(Math.random() * 1000) + ".node");
-let origfile = path.resolve(addonpath, "addon.node");
-fs.copyFileSync(origfile, tmpfile);
 
-export const native = __non_webpack_require__(tmpfile) as {
+export var native: {
 	captureWindow: (wnd: BigInt, x: number, y: number, w: number, h: number) => Uint8ClampedArray,
 	captureWindowMulti: <T extends { [key: string]: Rectangle | undefined | null }>(wnd: BigInt, rect: T) => { [key in keyof T]: Uint8ClampedArray },
 	getProcessMainWindow: (pid: number) => BigInt,
 	getProcessesByName: (name: string) => number[],
 	getProcessName: (pid: number) => string,
+	getActiveWindow: () => BigInt,
 
 	getWindowPid: (wnd: BigInt) => number,
 	getWindowBounds: (wnd: BigInt) => Rectangle,
@@ -29,6 +24,17 @@ export const native = __non_webpack_require__(tmpfile) as {
 	removeWindowListener: <T extends keyof windowEvents>(wnd: BigInt, type: T, cb: windowEvents[T]) => void,
 
 	test: (...arg: any) => any
+};
+reloadAddon();
+
+//(Re)loads the native code, this gives all kinds of mem leaks and other trouble if called more than once, only do so for debugging
+export function reloadAddon() {
+	//Copy the addon file so we can rebuild while alt1lite is already running
+	let addonpath = path.resolve(__dirname, "../build/Debug/");
+	let tmpfile = path.resolve(addonpath, "addon" + Math.floor(Math.random() * 1000) + ".node");
+	let origfile = path.resolve(addonpath, "addon.node");
+	fs.copyFileSync(origfile, tmpfile);
+	native = __non_webpack_require__(tmpfile);
 }
 
 type windowEvents = {
@@ -37,11 +43,17 @@ type windowEvents = {
 	show: (wnd: BigInt, event: number) => any
 };
 
+export function getActiveWindow() {
+	return new OSWindow(native.getActiveWindow());
+}
+
 export class OSWindow {
 	handle: BigInt;
 	constructor(handle: BigInt | Buffer) {
 		if (handle instanceof Buffer) {
-			this.handle = toBigIntLE(handle);
+			if (handle.byteLength == 8) { this.handle = handle.readBigUInt64LE(); }
+			else if (handle.byteLength == 4) { this.handle = BigInt(handle.readUInt32LE()); }
+			else { throw new Error("unexpected handle size"); }
 		} else if (typeof handle == "bigint") {
 			this.handle = handle;
 		}

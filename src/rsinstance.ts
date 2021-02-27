@@ -5,15 +5,18 @@ import fetch from "node-fetch";
 import { dialog, Menu, MenuItem, Tray } from "electron/main";
 import { MenuItemConstructorOptions, nativeImage } from "electron/common";
 import { handleSchemeArgs, handleSchemeCommand } from "./schemehandler";
-import { readJsonWithBOM, relPath, rsClientExe, sameDomainResolve, schemestring, UserError, weborigin } from "./lib";
+import { readJsonWithBOM, relPath, rsClientExe, sameDomainResolve, schemestring, weborigin } from "./lib";
 import { identifyApp } from "./appconfig";
-import { OSWindow, native, OSWindowPin, OSNullWindow } from "./native";
+import { OSWindow, native, OSWindowPin, OSNullWindow, getActiveWindow } from "./native";
 import { OverlayCommand } from "./shared";
 import { EventEmitter } from "events";
 import { TypedEmitter } from "./typedemitter";
 import { boundMethod } from "autobind-decorator";
 import { settings } from "./settings";
-import { openApp } from "./main";
+import { openApp, managedWindows } from "./main";
+import { ImgRefData, Rect, RectLike } from "@alt1/base";
+import { readAnything } from "./readers/alt1reader";
+import RightClickReader from "./readers/rightclick";
 
 
 export var rsInstances: RsInstance[] = [];
@@ -52,6 +55,17 @@ export function detectInstances() {
 	}
 }
 
+export function getActiveInstance() {
+	let wnd = getActiveWindow();
+	let rsinst = rsInstances.find(rs => rs.window.handle == wnd.handle);
+	if (rsinst) { return rsinst; }
+	if (!rsinst) {
+		let appwnd = managedWindows.find(w => w.nativeWindow.handle == wnd.handle);
+		if (appwnd) { return appwnd.rsClient; }
+	}
+	return null;
+}
+
 type RsInstanceEvents = {
 	close: []
 }
@@ -85,6 +99,49 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 		this.window.removeListener("close", this.close);
 		this.emit("close");
 		console.log(`stopped tracking rs client with pid: ${this.pid}`);
+	}
+
+	captureCursorArea(relrect: RectLike) {
+		let rsrect = this.window.getClientBounds();
+		//TODO map mouse correctly when scaled
+		let mouseabs = electron.screen.getCursorScreenPoint();
+		let mousex = mouseabs.x - rsrect.x;
+		let mousey = mouseabs.y - rsrect.y;
+
+		//TODO better sizing
+		let captrect = new Rect(mousex + relrect.x, mousey + relrect.y, relrect.width, relrect.height);
+		captrect.intersect(new Rect(0, 0, rsrect.width, rsrect.height));
+		let capt = native.captureWindow(this.window.handle, captrect.x, captrect.y, captrect.width, captrect.height);
+		let img = new ImageData(capt, captrect.width, captrect.height);
+		return { img, rect: new Rect(captrect.x - mousex, captrect.y - mousey, captrect.width, captrect.height) };
+	}
+
+	alt1Pressed() {
+		let capt = this.captureCursorArea(new Rect(-300, -300, 600, 600));
+		if (!capt.rect.containsPoint(0, 0)) { throw new Error("alt+1 pressed outside client"); }
+		let res = readAnything(capt.img, -capt.rect.x, -capt.rect.y);
+		if (res?.type == "text") {
+			let str = res.line.text;
+			console.log("text " + res.font + ": " + str);
+			//TODO grab these from c# alt1
+			if (res.font == "rightclick") {
+
+			}
+		} else {
+			console.log("no text found under cursor")
+		}
+		//TODO run alt1pressed event
+	}
+
+	rightClicked() {
+		let capt = this.captureCursorArea(new Rect(-300, -300, 600, 600));
+		let reader = new RightClickReader();
+		let img = new ImgRefData(capt.img, 0, 0);
+		if (reader.find(img)) {
+			//TODO notify and hide all overlapping apps
+
+			//TODO run rightclicked event
+		}
 	}
 
 	overlayCommands(frameid: number, commands: OverlayCommand[]) {

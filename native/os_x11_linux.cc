@@ -113,11 +113,6 @@ std::vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid)
 	
 	uid_t uidlist[1] = {getuid()};
 	std::unique_ptr<PROCTAB, decltype(&closeproc)> proctab = { openproc(PROC_FILLSTAT | PROC_UID, uidlist, 1), &closeproc };
-
-	// FIXME: Move this to ts
-	if (name == "rs2client.exe") {
-		name = "rs2client";
-	}
 	
 	proc_t data = {};
 	while (readproc(proctab.get(), &data) != NULL) {

@@ -14,5 +14,6 @@
 		"experimentalDecorators": true
 	},
 	"exclude": [ "node_modules", "types", "dist" ],
-	"compileOnSave": false
+	"compileOnSave": false,
+	"allowTsInNodeModules": true
 }

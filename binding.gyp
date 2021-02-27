@@ -34,6 +34,9 @@
 						'OS_WIN',
 						'OPENGL_SUPPORTED',
 					],
+					"sources": [
+						"./native/os_win.cc"
+					],
 					"libraries": ["<(module_root_dir)/libs/Alt1Native.lib"],
 					"copies": [
 						{

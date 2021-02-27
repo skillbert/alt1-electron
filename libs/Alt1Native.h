@@ -1,4 +1,4 @@
-
+#pragma once
 namespace Alt1Native {
 	struct HookedProcess;
 
