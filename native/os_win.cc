@@ -7,8 +7,8 @@
 * Currently using the Ansi version of windows api's as v8 expects utf8, this will work for ascii but will garble anything outside ascii
 */
 
-OSWindow OSGetActiveWindow() {
-	return OSWindow(GetForegroundWindow());
+std::unique_ptr<OSWindow> OSGetActiveWindow() {
+	return std::make_unique<OSWindow>(GetForegroundWindow());
 }
 
 void OSWindow::SetBounds(JSRectangle bounds) {
@@ -43,12 +43,12 @@ string OSWindow::GetTitle() {
 	GetWindowTextA(hwnd, &buf[0], len + 1);
 	return string(&buf[0]);
 }
-OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
+std::unique_ptr<OSWindow> OSWindow::FromJsValue(const Napi::Value jsval) {
 	auto handle = jsval.As<Napi::BigInt>();
 	bool lossless;
 	auto handleint = handle.Uint64Value(&lossless);
 	if (!lossless) { throw Napi::RangeError::New(jsval.Env(), "Invalid handle"); }
-	return OSWindow((HWND)handleint);
+	return std::make_unique<OSWindow>((HWND)handleint);
 }
 
 bool OSWindow::operator==(const OSWindow& other) const {
@@ -114,13 +114,13 @@ BOOL CALLBACK WinFindMainWindow_callback(HWND handle, LPARAM lParam)
 	return FALSE;
 }
 
-OSWindow OSFindMainWindow(unsigned long process_id)
+std::unique_ptr<OSWindow> OSFindMainWindow(unsigned long process_id)
 {
 	WinFindMainWindow_data data;
 	data.process_id = process_id;
 	data.window_handle = 0;
 	EnumWindows(WinFindMainWindow_callback, (LPARAM)&data);
-	return OSWindow(data.window_handle);
+	return std::make_unique<OSWindow>(data.window_handle);
 }
 
 void OSCaptureDesktopMulti(vector<CaptureRect> rects) {
@@ -129,24 +129,24 @@ void OSCaptureDesktopMulti(vector<CaptureRect> rects) {
 	}
 }
 
-void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects) {
+void OSCaptureWindowMulti(OSWindow* wnd, vector<CaptureRect> rects) {
 	for (auto const& capt : rects) {
 		OSCaptureWindow(capt.data, capt.size, wnd, capt.rect.x, capt.rect.y, capt.rect.width, capt.rect.height);
 	}
 }
 
-void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
+void OSSetWindowParent(OSWindow* wnd, OSWindow* parent) {
 	//show behind parent, then show parent behind self (no way to show in front in winapi)
-	if (parent.hwnd != 0) {
-		SetWindowPos(wnd.hwnd, parent.hwnd, 0, 0, 0, 0, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
-		SetWindowPos(parent.hwnd, wnd.hwnd, 0, 0, 0, 0, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
+	if (parent->hwnd != 0) {
+		SetWindowPos(wnd->hwnd, parent->hwnd, 0, 0, 0, 0, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
+		SetWindowPos(parent->hwnd, wnd->hwnd, 0, 0, 0, 0, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
 	}
 	//TODO there was a reason to do this instead of using the nicely named SetParent window, find out why
-	SetWindowLongPtr(wnd.hwnd, GWLP_HWNDPARENT, (uint64_t)parent.hwnd);
+	SetWindowLongPtr(wnd->hwnd, GWLP_HWNDPARENT, (uint64_t)parent->hwnd);
 }
 
-void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y, int w, int h) {
-	HDC hdc = GetDC(wnd.hwnd);
+void OSCaptureWindow(void* target, size_t maxlength, OSWindow* wnd, int x, int y, int w, int h) {
+	HDC hdc = GetDC(wnd->hwnd);
 	HDC hDest = CreateCompatibleDC(hdc);
 	HBITMAP hbDesktop = CreateCompatibleBitmap(hdc, w, h);
 	//TODO hbDekstop can be null (in alt1 code at least)
@@ -255,15 +255,15 @@ std::shared_ptr<WindowsEventHook> WindowsEventHook::GetHook(HWND hwnd, WindowsEv
 	return std::make_shared<WindowsEventHook>(hwnd, group);
 }
 
-void OSNewWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) {
-	auto ev = TrackedEvent(wnd, type, cb);
+void OSNewWindowListener(OSWindow* wnd, WindowEventType type, Napi::Function cb) {
+	auto ev = TrackedEvent(*wnd, type, cb);
 	windowHandlers.push_back(std::move(ev));
 }
 
-void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) {
+void OSRemoveWindowListener(OSWindow* wnd, WindowEventType type, Napi::Function cb) {
 	const TrackedEvent* ev = nullptr;
 	for (auto it = windowHandlers.begin(); it != windowHandlers.end(); it++) {
-		if (it->type == type && it->wnd == wnd && it->callback == Napi::Persistent(cb)) {
+		if (it->type == type && it->wnd == *wnd && it->callback == Napi::Persistent(cb)) {
 			windowHandlers.erase(it);
 			break;
 		}

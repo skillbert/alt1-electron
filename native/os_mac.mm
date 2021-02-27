@@ -4,40 +4,19 @@
 #include <unistd.h>
 #include "os.h"
 #include "libproc.h"
+#include "mac/nswindow.h"
 
 bool isCgWindowId(Window wnd) {
 	return wnd.cg.magicNo == MAGIC_WINID;
 }
 
 void OSWindow::SetBounds(JSRectangle bounds) {
-	if (isCgWindowId(this->hwnd)) {
-		std::cout << "SetBounds called on cgwindowid" << std::endl;
-		return;
-	}
-	
-	assert(bounds.width > 0);
-	assert(bounds.height > 0);
-	
-	NSWindow* window = [this->hwnd.wnd window];
-	if (window == NULL) {
-		return;
-	}
-	
-	int y = [[NSScreen mainScreen] frame].size.height - bounds.y - bounds.height;
-	NSRect rect = NSMakeRect(bounds.x, y, bounds.width, bounds.height);
-	[window setFrame:rect display:YES];
+	std::cout << "setbound base call !!" << std::endl;
 }
 
 JSRectangle OSWindow::GetBounds() {
-	if (isCgWindowId(this->hwnd)) {
-		std::cout << "GetBounds called on cgwindowid" << std::endl;
-		return JSRectangle();
-	}
-
-	NSWindow* window = [this->hwnd.wnd window];
-	NSRect frame = [window frame];
-	int y = [[NSScreen mainScreen] frame].size.height - frame.origin.y - frame.size.height;
-	return JSRectangle(frame.origin.x, y, frame.size.width, frame.size.height);
+	std::cout << "getbound base call !!" << std::endl;
+	return JSRectangle();
 }
 
 JSRectangle OSWindow::GetClientBounds() {
@@ -45,30 +24,17 @@ JSRectangle OSWindow::GetClientBounds() {
 }
 
 int OSWindow::GetPid() {
-	if (isCgWindowId(this->hwnd)) {
-		return 0;
-	}
-
-	// if it's NSView then it's always our own
-	return getpid();
+	std::cout << "getpid base call !!" << std::endl;
+	return 0;
 }
 
 bool OSWindow::IsValid() {
-	if (this->hwnd.wnd == NULL) {
-		return false;
-	}
-
-	return true;
+	return false;
 }
 
 std::string OSWindow::GetTitle() {
-	if (isCgWindowId(this->hwnd)) {
-		std::cout << "GetTitle called on cgwindowid" << std::endl;
-		return "";
-	}
-
-	NSWindow* window = [this->hwnd.wnd window];
-	return std::string([[window title] UTF8String]);
+	std::cout << "gettitle base call !!" << std::endl;
+	return "";
 }
 
 Napi::Value OSWindow::ToJS(Napi::Env env) {
@@ -76,7 +42,7 @@ Napi::Value OSWindow::ToJS(Napi::Env env) {
 	return Napi::BigInt::New(env, 0, size, (uint64_t*) &this->hwnd);
 }
 
-OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
+std::unique_ptr<OSWindow> OSWindow::FromJsValue(const Napi::Value jsval) {
 	auto handle = jsval.As<Napi::BigInt>();
 
 	OSRawWindow buf = DEFAULT_OSRAWWINDOW;
@@ -84,7 +50,13 @@ OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
 	size_t bufSize = sizeof(OSRawWindow) / sizeof(uint64_t);
 	handle.ToWords(&sign, &bufSize, (uint64_t*) &buf);
 
-	return OSWindow(buf);
+	if (buf.cg.magicNo == MAGIC_WINID) {
+		std::cout << "fromjs returning cgoswindow" << std::endl;
+		return std::make_unique<OSWindow>(buf);
+	} else {
+		std::cout << "fromjs returning nsoswindow" << std::endl;
+		return std::make_unique<NSOSWindow>(buf.view);
+	}
 }
 
 bool OSWindow::operator==(const OSWindow& other) const {

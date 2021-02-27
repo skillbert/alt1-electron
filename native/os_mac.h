@@ -22,7 +22,7 @@ typedef struct magicWinId {
 
 typedef union Window {
 	MagicWinId cg;
-	view_t* wnd;
+	view_t* view;
 } Window;
 
 typedef Window OSRawWindow;

@@ -25,36 +25,37 @@ struct CaptureRect {
 
 
 //TODO parameter type of objectwrap
-struct OSWindow {
-	OSRawWindow hwnd = DEFAULT_OSRAWWINDOW;
+class OSWindow {
 public:
+	OSRawWindow hwnd = DEFAULT_OSRAWWINDOW;
+
 	OSWindow() = default;
 	OSWindow(OSRawWindow wnd) :hwnd(wnd) {}
-	void SetBounds(JSRectangle bounds);
-	int GetPid();
-	JSRectangle GetBounds();
-	JSRectangle GetClientBounds();
-	bool IsValid();
-	string GetTitle();
-	Napi::Value ToJS(Napi::Env env);
+	virtual void SetBounds(JSRectangle bounds);
+	virtual int GetPid();
+	virtual JSRectangle GetBounds();
+	virtual JSRectangle GetClientBounds();
+	virtual bool IsValid();
+	virtual string GetTitle();
+	virtual Napi::Value ToJS(Napi::Env env);
 
-	static OSWindow FromJsValue(const Napi::Value jsval);
+	static std::unique_ptr<OSWindow> FromJsValue(const Napi::Value jsval);
 
-	bool operator==(const OSWindow& other) const;
-	bool operator<(const OSWindow& other) const;
+	virtual bool operator==(const OSWindow& other) const;
+	virtual bool operator<(const OSWindow& other) const;
 };
 
 vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid);
 
-OSWindow OSFindMainWindow(unsigned long process_id);
-void OSSetWindowParent(OSWindow wnd, OSWindow parent);
+std::unique_ptr<OSWindow> OSFindMainWindow(unsigned long process_id);
+void OSSetWindowParent(OSWindow* wnd, OSWindow* parent);
 
 void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h);
-void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y, int w, int h);
+void OSCaptureWindow(void* target, size_t maxlength, OSWindow* wnd, int x, int y, int w, int h);
 void OSCaptureDesktopMulti(vector<CaptureRect> rects);
-void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects);
+void OSCaptureWindowMulti(OSWindow* wnd, vector<CaptureRect> rects);
 string OSGetProcessName(int pid);
-OSWindow OSGetActiveWindow();
+std::unique_ptr<OSWindow> OSGetActiveWindow();
 
 
 enum WindowDragPhase { Start, Moving, End };
@@ -66,6 +67,6 @@ const std::map<std::string, WindowEventType> windowEventTypes = {
 	{"show",WindowEventType::Show}
 };
 
-void OSNewWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb);
+void OSNewWindowListener(OSWindow* wnd, WindowEventType type, Napi::Function cb);
 
-void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb);
+void OSRemoveWindowListener(OSWindow* wnd, WindowEventType type, Napi::Function cb);

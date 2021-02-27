@@ -85,7 +85,8 @@
 						'OS_MAC',
 					],
 					"sources": [
-						"./native/os_mac.mm"
+						"./native/os_mac.mm",
+						"./native/mac/nswindow.mm"
 					]
 				}],
 			]

@@ -98,14 +98,14 @@ bool OSWindow::operator<(const OSWindow& other) const {
 	return this->hwnd < other.hwnd;
 }
 
-OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
+std::unique_ptr<OSWindow> OSWindow::FromJsValue(const Napi::Value jsval) {
 	auto handle = jsval.As<Napi::BigInt>();
 	bool lossless;
 	xcb_window_t handleint = handle.Uint64Value(&lossless);
 	if (!lossless) {
 		Napi::RangeError::New(jsval.Env(), "Invalid handle").ThrowAsJavaScriptException();
 	}
-	return OSWindow(handleint);
+	return std::make_unique<OSWindow>(handleint);
 }
 
 std::vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid) {
@@ -128,24 +128,24 @@ std::vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid)
 	return out;
 }
 
-OSWindow OSFindMainWindow(unsigned long process_id) {
+std::unique_ptr<OSWindow> OSFindMainWindow(unsigned long process_id) {
 	ensureConnection();
 	std::vector<xcb_window_t> windows = findWindowsWithPid((pid_t) process_id);
 
 	if (windows.size() == 0){
-		return OSWindow(0);
+		return std::make_unique<OSWindow>(0);
 	}
 
-	return OSWindow(windows[0]);
+	return std::make_unique<OSWindow>(windows[0]);
 }
 
-void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
+void OSSetWindowParent(OSWindow* wnd, OSWindow* parent) {
 	ensureConnection();
 	// This does not work:
 	// 1. It show up on screenshot
 	// 2. It break setbounds somehow
 	// 3. Resizing doesn't work as it don't use setbounds
-	// xcb_reparent_window(connection, wnd.hwnd, parent.hwnd, 0, 0);
+	// xcb_reparent_window(connection, wnd->hwnd, parent->hwnd, 0, 0);
 }
 
 void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h) {
@@ -154,11 +154,11 @@ void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h
 	acquirer.copy(reinterpret_cast<char*>(target), maxlength, x, y, w, h);
 }
 
-void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y, int w, int h) {
+void OSCaptureWindow(void* target, size_t maxlength, OSWindow* wnd, int x, int y, int w, int h) {
 	ensureConnection();
-	xcb_composite_redirect_window(connection, wnd.hwnd, XCB_COMPOSITE_REDIRECT_AUTOMATIC);
+	xcb_composite_redirect_window(connection, wnd->hwnd, XCB_COMPOSITE_REDIRECT_AUTOMATIC);
 	xcb_pixmap_t pixId = xcb_generate_id(connection);
-	xcb_composite_name_window_pixmap(connection, wnd.hwnd, pixId);
+	xcb_composite_name_window_pixmap(connection, wnd->hwnd, pixId);
 
 	XShmCapture acquirer(connection, pixId);
 	acquirer.copy(reinterpret_cast<char*>(target), maxlength, x, y, w, h);
@@ -174,11 +174,11 @@ void OSCaptureDesktopMulti(vector<CaptureRect> rects) {
 		acquirer.copy(reinterpret_cast<char*>(rect.data), rect.size, rect.rect.x, rect.rect.y, rect.rect.width, rect.rect.height);
 	}
 }
-void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects) {
+void OSCaptureWindowMulti(OSWindow* wnd, vector<CaptureRect> rects) {
 	ensureConnection();
-	xcb_composite_redirect_window(connection, wnd.hwnd, XCB_COMPOSITE_REDIRECT_AUTOMATIC);
+	xcb_composite_redirect_window(connection, wnd->hwnd, XCB_COMPOSITE_REDIRECT_AUTOMATIC);
 	xcb_pixmap_t pixId = xcb_generate_id(connection);
-	xcb_composite_name_window_pixmap(connection, wnd.hwnd, pixId);
+	xcb_composite_name_window_pixmap(connection, wnd->hwnd, pixId);
 
 	XShmCapture acquirer(connection, pixId);
 
@@ -201,10 +201,10 @@ std::string OSGetProcessName(int pid) {
 	return std::string(data.cmd);
 }
 
-void OSNewWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) {
+void OSNewWindowListener(OSWindow* wnd, WindowEventType type, Napi::Function cb) {
 
 }
 
-void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) {
+void OSRemoveWindowListener(OSWindow* wnd, WindowEventType type, Napi::Function cb) {
 
 }
