@@ -201,6 +201,16 @@ std::string OSGetProcessName(int pid) {
 	return std::string(data.cmd);
 }
 
+std::unique_ptr<OSWindow> OSGetActiveWindow() {
+	xcb_get_property_cookie_t cookie = xcb_ewmh_get_active_window(&ewmhConnection, 0);
+	xcb_window_t window;
+	if (xcb_ewmh_get_active_window_reply(&ewmhConnection, cookie, &window, NULL) == 0) {
+		return std::make_unique<OSWindow>(0);
+	}
+
+	return std::make_unique<OSWindow>(window);
+}
+
 void OSNewWindowListener(OSWindow* wnd, WindowEventType type, Napi::Function cb) {
 
 }

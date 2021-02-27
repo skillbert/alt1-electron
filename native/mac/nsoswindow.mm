@@ -1,4 +1,4 @@
-#include "nswindow.h"
+#include "nsoswindow.h"
 
 void NSOSWindow::SetBounds(JSRectangle bounds) {
 	assert(bounds.width > 0);
@@ -30,10 +30,15 @@ int NSOSWindow::GetPid() {
 }
 
 bool NSOSWindow::IsValid() {
-	return this->view != NULL;
+	return this->view != NULL && [this->view window] != nil;
 }
 
 std::string NSOSWindow::GetTitle() {
 	NSWindow* window = [this->view window];
 	return std::string([[window title] UTF8String]);
+}
+
+CGWindowID NSOSWindow::cgWindowID() {
+	NSWindow* window = [this->view window];
+	return [window windowNumber];
 }

@@ -12,7 +12,7 @@ typedef void view_t;
 #endif
 
 #define MAGIC_WINID 0xC0A1
-#define DEFAULT_OSRAWWINDOW {0,0}
+#define DEFAULT_OSRAWWINDOW Window{0,0}
 
 typedef struct magicWinId {
 	uint64_t magicNo; // = MAGIC_WINID

@@ -86,7 +86,8 @@
 					],
 					"sources": [
 						"./native/os_mac.mm",
-						"./native/mac/nswindow.mm"
+						"./native/mac/nsoswindow.mm",
+						"./native/mac/cgoswindow.mm"
 					]
 				}],
 			]
