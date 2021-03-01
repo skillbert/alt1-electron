@@ -13,6 +13,7 @@ function addMain() {
 	config.entry("appframe/alt1api", "./appframe/alt1api.ts");
 	config.entry("overlayframe/index", "./overlayframe/index.tsx");
 	config.entry("settings/index", "./settings/index.tsx");
+	config.entry("tests/index", "./tests/index.ts");
 	config.output(path.resolve(__dirname, "dist"));
 	if (!config.opts.production) {
 		config.chain.devtool("" as any);

@@ -124,10 +124,11 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 			let str = res.line.text;
 			console.log("text " + res.font + ": " + str);
 			//TODO grab these from c# alt1
-			if (res.font == "rightclick") {
 
-			}
-		} else {
+		} else if (res?.type == "rightclick") {
+			
+		}
+		else {
 			console.log("no text found under cursor")
 		}
 		//TODO run alt1pressed event
