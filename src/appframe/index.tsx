@@ -4,6 +4,7 @@ import { useState, useLayoutEffect, useRef } from "react";
 import { render } from "react-dom";
 import { ipcRenderer, remote, WebContents, WebviewTag } from "electron";
 import classnames from "classnames";
+import type { RectLike } from "@alt1/base";
 
 import "./style.scss";
 import "./index.html";
@@ -21,6 +22,9 @@ window.addEventListener("DOMContentLoaded", () => {
 
 function AppFrame(p: {}) {
 	let el = useRef(null! as HTMLDivElement);
+
+	let [rightclickArea, setRightclickArea] = useState(null as RectLike | null);
+	let [minimized, setMinimized] = useState(false);
 
 	useLayoutEffect(() => {
 		let view = document.createElement("webview");
@@ -52,9 +56,33 @@ function AppFrame(p: {}) {
 		return () => { appview = null };
 	}, []);
 
+	useLayoutEffect(() => {
+		let handler = (e: any, rect: RectLike | null) => setRightclickArea(rect);
+		ipcRenderer.on("rightclick", handler);
+		return () => { ipcRenderer.off("rightclick", handler); };
+	}, []);
+
+	let appstyle: React.CSSProperties = {};
+	if (rightclickArea) {
+		//TODO handle window scaling, the coords are in window client area pixel coords
+		let rc = rightclickArea;
+		//This method is current broken in electron but works in browser? maybe need update
+		// let path = "";
+		// //path around entire window
+		// path += `M0 0 H${window.innerWidth} V${window.innerHeight} H0 Z `;
+		// //second path around the rightclick area this erases it because of rule evenodd
+		// path += `M${rightclickArea.x} ${rightclickArea.y} h${rightclickArea.width} v${rightclickArea.height} h${-rightclickArea.width} Z`;
+		// appstyle.clipPath = `path(evenodd,"${path}")`;
+		//kinda hacky this way with a 0 width line running through the clickable area but it works
+		let path = "";
+		path += `0 0, ${window.innerWidth}px 0, ${window.innerWidth}px ${window.innerHeight}px, 0 ${window.innerHeight}px,0 0,`;
+		path += `${rc.x}px ${rc.y}px,${rc.x + rc.width}px ${rc.y}px, ${rc.x + rc.width}px ${rc.y + rc.height}px, ${rc.x}px ${rc.y + rc.height}px, ${rc.x}px ${rc.y}px`;
+		appstyle.clipPath = `polygon(evenodd,${path})`;
+	}
+
 	return (
-		<React.Fragment>
-			<div className="approot" ref={el} >
+		<div className="approot" style={appstyle}>
+			<div className="appgrid" ref={el} style={{ display: minimized ? "none" : "", ...appstyle }} >
 				<BorderEl ver="top" hor="left" />
 				<BorderEl ver="top" hor="" />
 				<BorderEl ver="top" hor="right" />
@@ -66,11 +94,11 @@ function AppFrame(p: {}) {
 			</div>
 			<div className="buttonroot">
 				<div className="button" onClick={e => close()} />
-				<div className="button" />
+				<div className="button" onClick={e => setMinimized(!minimized)} />
 				<div className="button" onClick={toggleDevTools} onContextMenu={e => e.preventDefault()} />
 				<div className="dragbutton" onMouseDown={startDrag({ x: 1, y: 1, w: 0, h: 0 })} />
 			</div>
-		</React.Fragment>
+		</div>
 	);
 }
 

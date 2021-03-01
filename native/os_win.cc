@@ -203,10 +203,10 @@ struct WindowsEventHook {
 		}
 		switch (group) {
 		case WindowsEventGroup::Object:
-			eventhandle = SetWinEventHook(0x0000, 0x0030, 0, HookProc, pid, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+			eventhandle = SetWinEventHook(0x8000, 0x800B, 0, HookProc, pid, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 			break;
 		case WindowsEventGroup::System:
-			eventhandle = SetWinEventHook(0x8000, 0x800B, 0, HookProc, pid, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+			eventhandle = SetWinEventHook(0x0000, 0x0030, 0, HookProc, pid, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 			break;
 		default:
 			assert(false);
@@ -287,8 +287,19 @@ void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject
 			}
 		}
 		break;
-	case EVENT_SYSTEM_MOVESIZEEND:
+	case EVENT_SYSTEM_CAPTURESTART: {
+		auto windowhwnd = GetAncestor(hwnd, GA_ROOT);
+		for (const auto& h : windowHandlers) {
+			if (windowhwnd == h.wnd.hwnd && h.type == WindowEventType::Click) {
+				auto env = h.callback.Env();
+				Napi::HandleScope scope(env);
+				try { h.callback.MakeCallback(env.Global(), {}); }
+				catch (...) {}
+			}
+		}
+		break; }
 	case EVENT_SYSTEM_MOVESIZESTART:
+	case EVENT_SYSTEM_MOVESIZEEND:
 	case EVENT_OBJECT_LOCATIONCHANGE: {
 		JSRectangle bounds = wnd.GetBounds();
 		const char* phase = (event == EVENT_SYSTEM_MOVESIZEEND ? "end" : event == EVENT_SYSTEM_MOVESIZESTART ? "start" : "moving");
@@ -316,7 +327,7 @@ void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject
 	}
 }
 
-TrackedEvent::TrackedEvent(OSWindow wnd, WindowEventType type,Napi::Function cb) {
+TrackedEvent::TrackedEvent(OSWindow wnd, WindowEventType type, Napi::Function cb) {
 	this->wnd = wnd;
 	this->type = type;
 	this->callback = Napi::Persistent(cb);
@@ -325,8 +336,13 @@ TrackedEvent::TrackedEvent(OSWindow wnd, WindowEventType type,Napi::Function cb)
 	//TODO error handling
 	GetWindowThreadProcessId(wnd.hwnd, &pid);
 	switch (type) {
+	case WindowEventType::Click:
+		this->hooks = {
+			WindowsEventHook::GetHook(wnd.hwnd,WindowsEventGroup::System)
+		};
+		break;
 	case WindowEventType::Move:
-		this->hooks = { 
+		this->hooks = {
 			WindowsEventHook::GetHook(wnd.hwnd,WindowsEventGroup::Object),
 			WindowsEventHook::GetHook(wnd.hwnd,WindowsEventGroup::System)
 		};

@@ -51,3 +51,7 @@ export async function showImageData(img: ImageData) {
 		shell.openPath(filename);
 	}
 }
+
+export function delay(t: number) {
+	return new Promise(d => setTimeout(d, t));
+}

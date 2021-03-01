@@ -44,7 +44,7 @@ export default class RightClickReader {
 			x: topleft.x,
 			y: topleft.y - 1,
 			width: topright[0].x - topleft.x + 3,
-			height: botleft[0].y - topleft.y + 11
+			height: botleft[0].y - topleft.y + 9
 		};
 		return this.pos;
 	}

@@ -40,7 +40,8 @@ export function reloadAddon() {
 type windowEvents = {
 	close: () => any,
 	move: (bounds: Rectangle, phase: "start" | "moving" | "end") => any,
-	show: (wnd: BigInt, event: number) => any
+	show: (wnd: BigInt, event: number) => any,
+	click: () => any
 };
 
 export function getActiveWindow() {

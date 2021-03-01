@@ -60,10 +60,6 @@ function alt1Pressed() {
 	}
 }
 
-function rsRightclicked() {
-
-}
-
 export function openApp(app: Bookmark, inst?: RsInstance) {
 	if (!inst) {
 		detectInstances();
@@ -86,7 +82,8 @@ class ManagedWindow {
 			webPreferences: { nodeIntegration: true, webviewTag: true, enableRemoteModule: true },
 			frame: false,
 			width: app.defaultWidth,
-			height: app.defaultHeight
+			height: app.defaultHeight,
+			transparent: true
 		});
 
 		this.rsClient = rsclient;
@@ -121,19 +118,23 @@ function drawTray() {
 				click: openApp.bind(null, app, undefined),
 			});
 		}
+		if (process.env.NODE_ENV === "development") {
+			menu.push({ type: "separator" });
+			menu.push({
+				label: "Restart", click: e => {
+					//relaunch uses the dir at time of call, there is no better way to give it the original dir
+					process.chdir(originalCwd);
+					app.relaunch();
+					process.chdir(__dirname);
+					app.quit();
+				}
+			});
+			menu.push({ label: "Repin RS", click: e => { rsInstances.forEach(e => e.close()); detectInstances(); } });
+			menu.push({ label: "Reload native addon", click: e => { reloadAddon(); } });
+		}
 		menu.push({ type: "separator" });
 		menu.push({ label: "Settings", click: showSettings });
 		menu.push({ label: "Exit", click: e => app.quit() });
-		menu.push({
-			label: "Restart", click: e => {
-				//relaunch uses the dir at time of call, there is no better way to give it the original dir
-				process.chdir(originalCwd);
-				app.relaunch();
-				process.chdir(__dirname);
-				app.quit();
-			}
-		});
-		menu.push({ label: "Reload native addon", click: e => { reloadAddon(); } });
 		let menuinst = Menu.buildFromTemplate(menu);
 		tray!.setContextMenu(menuinst);
 		tray!.popUpContextMenu();

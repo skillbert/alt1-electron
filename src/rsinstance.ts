@@ -5,7 +5,7 @@ import fetch from "node-fetch";
 import { dialog, Menu, MenuItem, Tray } from "electron/main";
 import { MenuItemConstructorOptions, nativeImage } from "electron/common";
 import { handleSchemeArgs, handleSchemeCommand } from "./schemehandler";
-import { readJsonWithBOM, relPath, rsClientExe, sameDomainResolve, schemestring, weborigin } from "./lib";
+import { delay, readJsonWithBOM, relPath, rsClientExe, sameDomainResolve, schemestring, weborigin } from "./lib";
 import { identifyApp } from "./appconfig";
 import { OSWindow, native, OSWindowPin, OSNullWindow, getActiveWindow } from "./native";
 import { OverlayCommand } from "./shared";
@@ -14,7 +14,7 @@ import { TypedEmitter } from "./typedemitter";
 import { boundMethod } from "autobind-decorator";
 import { settings } from "./settings";
 import { openApp, managedWindows } from "./main";
-import { ImgRefData, Rect, RectLike } from "@alt1/base";
+import { ImgRef, ImgRefData, PointLike, Rect, RectLike } from "@alt1/base";
 import { readAnything } from "./readers/alt1reader";
 import RightClickReader from "./readers/rightclick";
 
@@ -70,16 +70,68 @@ type RsInstanceEvents = {
 	close: []
 }
 
+class ActiveRightclick {
+	reader: RightClickReader;
+	inst: RsInstance;
+	interval: number;
+	imgref: ImgRef;
+	clientRect: RectLike;
+	constructor(client: RsInstance, reader: RightClickReader, imgref: ImgRef) {
+		this.reader = reader;
+		this.inst = client;
+		this.imgref = imgref;
+		this.clientRect = new Rect(reader.pos!.x + imgref.x, reader.pos!.y + imgref.y, reader.pos!.width, reader.pos!.height);
+
+		this.interval = setInterval(this.check, 100) as any;
+		let screentopleft = this.inst.clientToScreen({ x: this.clientRect.x, y: this.clientRect.y });
+		let screenbotright = this.inst.clientToScreen({ x: this.clientRect.x + this.clientRect.width, y: this.clientRect.y + this.clientRect.height });
+		for (let wnd of managedWindows) {
+			if (wnd.rsClient != this.inst) { continue; }
+			let wndbounds = wnd.nativeWindow.getClientBounds();
+			let rect = {
+				x: screentopleft.x - wndbounds.x,
+				y: screentopleft.y - wndbounds.y,
+				width: screenbotright.x - screentopleft.x,
+				height: screenbotright.y - screentopleft.y
+			};
+			wnd.window.webContents.send("rightclick", rect);
+		}
+		this.inst.activeRightclick = this;
+	}
+
+	close() {
+		for (let wnd of managedWindows) {
+			if (wnd.rsClient != this.inst) { continue; }
+			wnd.window.webContents.send("rightclick", null);
+		}
+		clearInterval(this.interval);
+		this.inst.activeRightclick = null;
+	}
+
+	@boundMethod
+	check() {
+		let screenpos = electron.screen.getCursorScreenPoint();
+		let mouse = this.inst.screenToClient(screenpos);
+		let pos = this.clientRect;
+		const margin = 10;
+		if (mouse.x < pos.x - margin || mouse.y < pos.y - margin || mouse.x > pos.x + pos.width + margin || mouse.y > pos.y + pos.height + margin) {
+			this.close();
+		}
+	}
+}
+
 export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 	pid: number;
 	window: OSWindow;
 	overlayWindow: { browser: BrowserWindow, nativewnd: OSWindow, pin: OSWindowPin, stalledOverlay: { frameid: number, cmd: OverlayCommand[] }[] } | null;
+	activeRightclick: ActiveRightclick | null = null;
 
 	constructor(pid: number) {
 		super();
 		this.pid = pid;
 		this.window = new OSWindow(native.getProcessMainWindow(pid));
 		this.window.on("close", this.close);
+		this.window.on("click", this.clientClicked);
 		this.overlayWindow = null;
 
 		for (let app of settings.bookmarks) {
@@ -101,48 +153,74 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 		console.log(`stopped tracking rs client with pid: ${this.pid}`);
 	}
 
-	captureCursorArea(relrect: RectLike) {
-		let rsrect = this.window.getClientBounds();
-		//TODO map mouse correctly when scaled
-		let mouseabs = electron.screen.getCursorScreenPoint();
-		let mousex = mouseabs.x - rsrect.x;
-		let mousey = mouseabs.y - rsrect.y;
+	@boundMethod
+	async clientClicked() {
+		if (this.activeRightclick) {
+			this.activeRightclick.close();
+		}
+		//TODO actually check if it is a rightclick
+		if (true) {
+			//need to wait for 2 frames to get rendered (doublebuffered)
+			await delay(2 * 50);
+			let mousepos = this.getClientMouse();
+			let captrect = new Rect(mousepos.x - 300, mousepos.y - 300, 600, 600);
+			captrect.intersect({ x: 0, y: 0, ...this.getClientSize() });
+			let capt = this.capture(captrect);
+			let reader = new RightClickReader();
+			let img = new ImgRefData(capt, 0, 0);
+			if (reader.find(img)) {
+				new ActiveRightclick(this, reader, new ImgRefData(capt, captrect.x, captrect.y));
+				//TODO run rightclicked event
+			}
+		}
+	}
 
-		//TODO better sizing
-		let captrect = new Rect(mousex + relrect.x, mousey + relrect.y, relrect.width, relrect.height);
-		captrect.intersect(new Rect(0, 0, rsrect.width, rsrect.height));
-		let capt = native.captureWindow(this.window.handle, captrect.x, captrect.y, captrect.width, captrect.height);
-		let img = new ImageData(capt, captrect.width, captrect.height);
-		return { img, rect: new Rect(captrect.x - mousex, captrect.y - mousey, captrect.width, captrect.height) };
+	screenToClient(p: PointLike) {
+		let rsrect = this.window.getClientBounds();
+		//TODO add scaling
+		return { x: p.x - rsrect.x, y: p.y - rsrect.y };
+	}
+
+	clientToScreen(p: PointLike) {
+		let rsrect = this.window.getClientBounds();
+		//TODO add scaling
+		return { x: p.x + rsrect.x, y: p.y + rsrect.y };
+	}
+
+	getClientMouse() {
+		return this.screenToClient(electron.screen.getCursorScreenPoint());
+	}
+
+	getClientSize() {
+		//TODO this doesn't account for scaling
+		let rect = this.window.getClientBounds();
+		return { width: rect.width, height: rect.height };
+	}
+
+	capture(rect: RectLike) {
+		let capt = native.captureWindow(this.window.handle, rect.x, rect.y, rect.width, rect.height);
+		return new ImageData(capt, rect.width, rect.height);
 	}
 
 	alt1Pressed() {
-		let capt = this.captureCursorArea(new Rect(-300, -300, 600, 600));
-		if (!capt.rect.containsPoint(0, 0)) { throw new Error("alt+1 pressed outside client"); }
-		let res = readAnything(capt.img, -capt.rect.x, -capt.rect.y);
+		let mousepos = this.getClientMouse();
+		let captrect = new Rect(mousepos.x - 300, mousepos.y - 300, 600, 600);
+		captrect.intersect({ x: 0, y: 0, ...this.getClientSize() });
+		if (!captrect.containsPoint(mousepos.x, mousepos.y)) { throw new Error("alt+1 pressed outside client"); }
+		let img = this.capture(captrect);
+		let res = readAnything(img, mousepos.x - captrect.x, mousepos.y - captrect.y);
 		if (res?.type == "text") {
 			let str = res.line.text;
 			console.log("text " + res.font + ": " + str);
 			//TODO grab these from c# alt1
 
 		} else if (res?.type == "rightclick") {
-			
+			console.log("rightclick: " + res.line.text);
 		}
 		else {
 			console.log("no text found under cursor")
 		}
 		//TODO run alt1pressed event
-	}
-
-	rightClicked() {
-		let capt = this.captureCursorArea(new Rect(-300, -300, 600, 600));
-		let reader = new RightClickReader();
-		let img = new ImgRefData(capt.img, 0, 0);
-		if (reader.find(img)) {
-			//TODO notify and hide all overlapping apps
-
-			//TODO run rightclicked event
-		}
 	}
 
 	overlayCommands(frameid: number, commands: OverlayCommand[]) {

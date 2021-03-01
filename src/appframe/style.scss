@@ -1,8 +1,19 @@
 body {
 	overflow: hidden;
+	background: none;
+}
+webview{
+	background:black;
+}
+.approot {
+	position: absolute;
+	top: 0px;
+	left: 0px;
+	bottom: 0px;
+	right: 0px;
 }
 
-.approot {
+.appgrid {
 	position: absolute;
 	top: 0px;
 	left: 0px;
@@ -26,7 +37,7 @@ body {
 	right: 0px;
 }
 .button {
-	-webkit-app-region:none;
+	-webkit-app-region: no-drag;
 	background-position: 0px 0px;
 	width: 14px;
 	height: 14px;
@@ -51,7 +62,7 @@ body {
 }
 
 .border {
-	-webkit-app-region:none;
+	-webkit-app-region: no-drag;
 	background: black;
 	border: 1px solid red;
 	&-left,

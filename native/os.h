@@ -59,11 +59,12 @@ OSWindow OSGetActiveWindow();
 
 enum WindowDragPhase { Start, Moving, End };
 
-enum class WindowEventType { Move, Close,Show };
+enum class WindowEventType { Move, Close, Show, Click };
 const std::map<std::string, WindowEventType> windowEventTypes = {
 	{"move",WindowEventType::Move},
 	{"close",WindowEventType::Close},
-	{"show",WindowEventType::Show}
+	{"show",WindowEventType::Show},
+	{"click",WindowEventType::Click}
 };
 
 void OSNewWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb);
