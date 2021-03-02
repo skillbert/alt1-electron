@@ -37,17 +37,16 @@ function AppFrame(p: {}) {
 		view.nodeintegration = false;
 		view.nodeintegrationinsubframes = false;
 		view.src = thiswindow.appConfig.appUrl;
+		//view.webpreferences = "nativeWindowOpen,sandbox,contextIsolation=true";
 		view.webpreferences = "nativeWindowOpen,sandbox";
 		el.current.appendChild(view);
 		view.addEventListener("dom-ready", e => {
 			//TODO is there a better way to get a ref to the frame?
 			thiswindow.appFrameId = view.getWebContentsId();
+			appcontents = remote.webContents.fromId(appview!.getWebContentsId());
 		});
 
 		appview = view;
-		view.addEventListener("dom-ready", () => {
-			appcontents = remote.webContents.fromId(appview!.getWebContentsId());
-		});
 		//setparent doesnt work as expected
 		// view.addEventListener("devtools-opened", e => {
 		// 	let devwnd = (appcontents!.devToolsWebContents as any).getOwnerBrowserWindow();

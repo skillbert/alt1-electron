@@ -353,7 +353,7 @@ TrackedEvent::TrackedEvent(OSWindow wnd, WindowEventType type, Napi::Function cb
 		};
 		break;
 	case WindowEventType::Show:
-		//TODO don't need both here
+		//TODO don't need both here, currently spamming basically all event under all windows (hwnd=0)
 		this->hooks = {
 			WindowsEventHook::GetHook(wnd.hwnd,WindowsEventGroup::Object),
 			WindowsEventHook::GetHook(wnd.hwnd,WindowsEventGroup::System),

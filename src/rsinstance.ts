@@ -23,6 +23,7 @@ export var rsInstances: RsInstance[] = [];
 
 function init() {
 	detectInstances();
+	//TODO this event current fires in many situations, one being simply the active window changing
 	OSNullWindow.on("show", windowCreated);
 };
 setImmediate(init);
@@ -31,13 +32,18 @@ function windowCreated(handle: BigInt) {
 	if (handle == BigInt(0)) { return; }
 	let wnd = new OSWindow(handle);
 	let pid = native.getWindowPid(wnd.handle);
-	if (!rsInstances.find(q => q.pid == pid)) {
+	let wndinst = getRsInstanceFromWnd(wnd);
+	let pidinst = rsInstances.find(q => q.pid == pid);
+
+	if (!wndinst && !pidinst) {
 		let processname = native.getProcessName(pid);
 		let title = wnd.getTitle();
+		//TODO there is currently an issue where it will pin the wrong hwnd of the rs process and this is not recoverable
 		if (title.startsWith("RuneScape") && processname == rsClientExe) {
 			new RsInstance(pid);
 		}
 	}
+	rsInstances.forEach(i => i.setActive(wndinst == i));
 }
 
 export function detectInstances() {
@@ -55,11 +61,11 @@ export function detectInstances() {
 	}
 }
 
-export function getActiveInstance() {
-	let wnd = getActiveWindow();
+export function getRsInstanceFromWnd(wnd: OSWindow) {
 	let rsinst = rsInstances.find(rs => rs.window.handle == wnd.handle);
 	if (rsinst) { return rsinst; }
 	if (!rsinst) {
+		//TODO check popups as well
 		let appwnd = managedWindows.find(w => w.nativeWindow.handle == wnd.handle);
 		if (appwnd) { return appwnd.rsClient; }
 	}
@@ -70,6 +76,8 @@ type RsInstanceEvents = {
 	close: []
 }
 
+
+//TODO this class is just straight up weird
 class ActiveRightclick {
 	reader: RightClickReader;
 	inst: RsInstance;
@@ -126,6 +134,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 	overlayWindow: { browser: BrowserWindow, nativewnd: OSWindow, pin: OSWindowPin, stalledOverlay: { frameid: number, cmd: OverlayCommand[] }[] } | null;
 	activeRightclick: ActiveRightclick | null = null;
 	isActive = false;
+	lastBlurTime = 0;
 
 	constructor(pid: number) {
 		super();
@@ -172,12 +181,25 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 			let mousepos = this.screenToClient(electron.screen.getCursorScreenPoint());
 			let captrect = new Rect(mousepos.x - 300, mousepos.y - 300, 600, 600);
 			captrect.intersect({ x: 0, y: 0, ...this.getClientSize() });
+			if (captrect.width <= 0 || captrect.height <= 0) {
+				console.log("tried to capture 0 size area around mouse click");
+				return;
+			}
 			let capt = this.capture(captrect);
 			let reader = new RightClickReader();
 			let img = new ImgRefData(capt, 0, 0);
 			if (reader.find(img)) {
+				let pos = reader.pos!;
 				new ActiveRightclick(this, reader, new ImgRefData(capt, captrect.x, captrect.y));
-				//TODO run rightclicked event
+				this.emitAppEvent("", "menudetected", {
+					eventName: "menudetected",
+					rectangle: {
+						x: pos.x + captrect.x,
+						y: pos.y + captrect.y,
+						width: pos.width,
+						height: pos.height
+					}
+				});
 			}
 		}
 	}

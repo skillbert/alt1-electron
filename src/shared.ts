@@ -2,6 +2,13 @@
 export type FlatImageData = { data: Uint8ClampedArray, width: number, height: number };
 export type SyncResponse<T> = { error: string } | { error: undefined, value: T };
 export type Rectangle = { x: number, y: number, width: number, height: number };
+export type RsClientState = {
+	clientRect: Rectangle,
+	active: boolean,
+	lastBlurTime: number,
+	ping: number,
+	scaling: number
+}
 
 
 type DrawBase = {};

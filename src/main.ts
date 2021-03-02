@@ -8,8 +8,8 @@ import { handleSchemeArgs, handleSchemeCommand } from "./schemehandler";
 import { patchImageDataShow, readJsonWithBOM, relPath, rsClientExe, sameDomainResolve, schemestring, weborigin } from "./lib";
 import { identifyApp } from "./appconfig";
 import { getActiveWindow, native, OSNullWindow, OSWindow, OSWindowPin, reloadAddon } from "./native";
-import { detectInstances, getActiveInstance, RsInstance, rsInstances } from "./rsinstance";
-import { OverlayCommand, Rectangle } from "./shared";
+import { detectInstances, getRsInstanceFromWnd, RsInstance, rsInstances } from "./rsinstance";
+import { OverlayCommand, Rectangle, RsClientState } from "./shared";
 import { AppPermission, Bookmark, loadSettings, saveSettings, settings } from "./settings";
 import type { Alt1EventType } from "@alt1/base";
 
@@ -47,7 +47,7 @@ app.once("ready", () => {
 });
 
 function alt1Pressed() {
-	let rsinst = getActiveInstance();
+	let rsinst = getRsInstanceFromWnd(getActiveWindow());
 	try {
 		if (!rsinst) {
 			throw new Error("Alt+1 pressed but no active rs client found");
@@ -160,7 +160,7 @@ export function* selectAppContexts(rsinstance: RsInstance | null, permission: Ap
 		//TODO move this to method on appconfig instead
 		if (permission && !wnd.appConfig.permissions.includes(permission)) { continue; }
 		if (wnd.appFrameId == -1) { continue; }
-		let webcontent = electron.WebContents.fromId(wnd.appFrameId);
+		let webcontent = electron.webContents.fromId(wnd.appFrameId);
 		yield webcontent;
 	}
 }
@@ -191,7 +191,14 @@ function initIpcApi() {
 	ipcMain.on("rsbounds", (e) => {
 		let wnd = getManagedAppWindow(e.sender.id);
 		if (!wnd?.rsClient.window) { throw new Error("rs window not found"); }
-		e.returnValue = { value: wnd?.rsClient.window.getClientBounds() };
+		let state: RsClientState = {
+			active: wnd.rsClient.isActive,
+			clientRect: wnd.rsClient.window.getClientBounds(),
+			lastBlurTime: wnd.rsClient.lastBlurTime,
+			ping: 10,//TODO
+			scaling: 1//TODO
+		};
+		e.returnValue = { value: state };
 	});
 
 	ipcMain.handle("capture", (e, x, y, w, h) => {

@@ -1,7 +1,8 @@
 //this import also imports global namespace alt1 passively...
 import type * as alt1types from "@alt1/base";
 import { ipcRenderer } from "electron";
-import { FlatImageData, SyncResponse, Rectangle, OverlayCommand, OverlayPrimitive } from "../shared";
+import { contextBridge } from "electron/renderer";
+import { FlatImageData, SyncResponse, Rectangle, OverlayCommand, OverlayPrimitive, RsClientState } from "../shared";
 
 let warningsTriggered: string[] = [];
 function warn(key: string, message: string) {
@@ -9,6 +10,13 @@ function warn(key: string, message: string) {
 		console.warn(message);
 		warningsTriggered.push(key);
 	}
+}
+
+function removedApi(): never {
+	throw new Error("this API has been removed, use one of the npm @alt1/* packages instead");
+}
+function notImplemented(): never {
+	throw new Error("Not implemented yet");
 }
 
 ipcRenderer.on("appevent", <T extends keyof alt1types.Alt1EventType>(e, type: T, appevent: alt1types.Alt1EventType[T]) => {
@@ -53,7 +61,7 @@ function imagedataToBase64(img: FlatImageData) {
 	return str;
 }
 
-let lastRsInfo: SyncResponse<Rectangle> = null!;
+let lastRsInfo: SyncResponse<RsClientState> = null!;
 let lastRsInfoTime = 0;
 function getRsInfo() {
 	let info = lastRsInfo;
@@ -82,17 +90,12 @@ function sendOverlayQueue() {
 	overlayDebounceCommands = [];
 }
 
-//TODO remove
-(window as any).invoke = (ch: string, ...args: any[]) => {
-	return ipcRenderer.invoke(ch, ...args);
-}
-
 //TODO use contextBridge.exposeInMainWorld
 var alt1api: Partial<typeof alt1> = {
 
 	identifyAppUrl: (url) => ipcRenderer.send("identifyapp", url),
 	captureInterval: 100,
-	maxtransfer: 10000000,
+	maxtransfer: 100e6,
 	openInfo: '{"openMethod":"systray"}',
 	skinName: "default",
 	version: "1.3.0",//old-ish version because of missing apis
@@ -146,11 +149,7 @@ var alt1api: Partial<typeof alt1> = {
 	setTooltip(str) { return true; },
 	clearTooltip() { alt1api.setTooltip!(""); },
 
-};
-
-//API extension for fast capture
-//declared here to not break outdated window.alt1 typing
-let extendedapi = {
+	//new API's
 	capture(x, y, width, height) {
 		return captureSync(x, y, width, height).data;
 	},
@@ -165,9 +164,31 @@ let extendedapi = {
 	bindGetRegionBuffer(id, x, y, w, h) {
 		if (!boundImage || id != 1) { throw new Error("no bound image"); }
 		return subImageData(boundImage, x, y, w, h).data;
-	}
-};
+	},
+	closeApp() {
+		//TODO check if this actually works
+		window.close();
+	},
 
+	//TODO
+	bindFindSubImg: notImplemented,
+	getRegionMulti: notImplemented,
+	registerStatusDaemon: notImplemented,
+	showNotification: notImplemented,
+	setTaskbarProgress: notImplemented,
+	setTitleBarText: notImplemented,
+	userResize: notImplemented,
+
+	//no plans to implement
+	addOCRFont: removedApi,
+	bindReadColorString: removedApi,
+	bindReadRightClickString: removedApi,
+	bindReadString: removedApi,
+	bindReadStringEx: removedApi,
+	bindScreenRegion: removedApi,
+	clearBinds: removedApi,
+
+};
 
 function subImageData(img: FlatImageData, x: number, y: number, w: number, h: number) {
 	if (x == 0 && y == 0 && w == img.width && h == img.height) {
@@ -183,19 +204,28 @@ function subImageData(img: FlatImageData, x: number, y: number, w: number, h: nu
 	return { data: newdata, width: w, height: h } as FlatImageData;
 }
 
-Object.defineProperties(alt1api, {
-	rsX: { get() { return getRsInfo()?.x || 0; } },
-	rsY: { get() { return getRsInfo()?.y || 0; } },
-	rsWidth: { get() { return getRsInfo()?.width || 0; } },
-	rsHeight: { get() { return getRsInfo()?.height || 0; } },
-	rsLinked: { get() { return true; } },
+let getters: PropertyDescriptorMap = {
+	rsX: { get() { return getRsInfo().clientRect.x } },
+	rsY: { get() { return getRsInfo().clientRect.y } },
+	rsWidth: { get() { return getRsInfo().clientRect.width } },
+	rsHeight: { get() { return getRsInfo().clientRect.height } },
+	rsActive: { get() { return getRsInfo().active } },
+	rsLastActive: { get() { return (getRsInfo().active ? 0 : Date.now() - getRsInfo().lastBlurTime); } },
+	rsPing: { get() { return getRsInfo().ping; } },
+	rsScaling: { get() { return getRsInfo().scaling; } },
+	rsLinked: { get() { return true; } }, //can no longer open apps without rs
 	currentWorld: { get() { return 1; } },
+	//TODO
+	captureMethod: { get() { return "directx" } },
+	lastWorldHop: { get() { return 0; } },
 	permissionGameState: { get() { return true; } },
 	permissionInstalled: { get() { return true; } },
 	permissionOverlay: { get() { return true; } },
 	permissionPixel: { get() { return true; } }
-});
+};
 
-Object.assign(alt1api, extendedapi);
+Object.defineProperties(alt1api, getters);
 
+//TODO need some changes to make this work
+//contextBridge.exposeInMainWorld("alt1", alt1api);
 (window as any).alt1 = alt1api;
