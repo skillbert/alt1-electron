@@ -11,6 +11,22 @@ function warn(key: string, message: string) {
 	}
 }
 
+ipcRenderer.on("appevent", <T extends keyof alt1types.Alt1EventType>(e, type: T, appevent: alt1types.Alt1EventType[T]) => {
+	try {
+		if (type == "alt1pressed" && (window as any).alt1onrightclick) {
+			warn("alt1onrightclick", "window.alt1onrightclick is depricated use the wrapper lib instead");
+			(window as any).alt1onrightclick(appevent);
+		}
+		if (Array.isArray(alt1.events[type])) {
+			for (let handler of alt1.events[type]) {
+				handler(appevent);
+			}
+		}
+	} catch (e) {
+		console.error(e);
+	}
+});
+
 function captureSync(x: number, y: number, w: number, h: number) {
 	warn("captsync", "Synchonous capture is depricated");
 	let img: SyncResponse<FlatImageData> = ipcRenderer.sendSync("capturesync", x, y, w, h);

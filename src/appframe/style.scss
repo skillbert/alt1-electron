@@ -2,8 +2,8 @@ body {
 	overflow: hidden;
 	background: none;
 }
-webview{
-	background:black;
+webview {
+	background: black;
 }
 .approot {
 	position: absolute;
@@ -11,6 +11,8 @@ webview{
 	left: 0px;
 	bottom: 0px;
 	right: 0px;
+	//need to turn off pointerevent for clickthrough effect
+	pointer-events: none;
 }
 
 .appgrid {
@@ -22,6 +24,7 @@ webview{
 	display: grid;
 	grid-template-columns: 8px auto 8px;
 	grid-template-rows: 8px auto 8px;
+	pointer-events: all;
 }
 
 .appframe {
@@ -35,6 +38,7 @@ webview{
 	position: absolute;
 	top: 0px;
 	right: 0px;
+	pointer-events: all;
 }
 .button {
 	-webkit-app-region: no-drag;

@@ -4,6 +4,10 @@ import { configFile, readJsonWithBOM, weborigin } from "./lib";
 import { identifyApp } from "./appconfig";
 import fetch from "node-fetch";
 
+export type AppPermission = UservarType<typeof checkPermission>;
+
+var checkPermission = Checks.strenum({ "pixel": "Pixel", "overlay": "Overlay", "game": "Game Data" });
+
 var checkBookmark = Checks.obj({
 	appName: Checks.str(),
 	description: Checks.str(),
@@ -16,7 +20,7 @@ var checkBookmark = Checks.obj({
 	minHeight: Checks.num(undefined, 0),
 	maxWidth: Checks.num(undefined, 0),
 	maxHeight: Checks.num(undefined, 0),
-	permissions: Checks.arr(Checks.strenum({ "pixel": "Pixel", "overlay": "Overlay", "game": "Game Data" })),
+	permissions: Checks.arr(checkPermission),
 	lastRect: Checks.opt(Checks.obj({
 		left: Checks.num(),
 		right: Checks.num(),

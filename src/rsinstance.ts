@@ -12,9 +12,9 @@ import { OverlayCommand } from "./shared";
 import { EventEmitter } from "events";
 import { TypedEmitter } from "./typedemitter";
 import { boundMethod } from "autobind-decorator";
-import { settings } from "./settings";
-import { openApp, managedWindows } from "./main";
-import { ImgRef, ImgRefData, PointLike, Rect, RectLike } from "@alt1/base";
+import { AppPermission, settings } from "./settings";
+import { openApp, managedWindows, selectAppContexts } from "./main";
+import { Alt1EventType, ImgRef, ImgRefData, PointLike, Rect, RectLike } from "@alt1/base";
 import { readAnything } from "./readers/alt1reader";
 import RightClickReader from "./readers/rightclick";
 
@@ -125,6 +125,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 	window: OSWindow;
 	overlayWindow: { browser: BrowserWindow, nativewnd: OSWindow, pin: OSWindowPin, stalledOverlay: { frameid: number, cmd: OverlayCommand[] }[] } | null;
 	activeRightclick: ActiveRightclick | null = null;
+	isActive = false;
 
 	constructor(pid: number) {
 		super();
@@ -153,6 +154,12 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 		console.log(`stopped tracking rs client with pid: ${this.pid}`);
 	}
 
+	emitAppEvent<T extends keyof Alt1EventType>(permission: AppPermission | "", type: T, event: Alt1EventType[T]) {
+		for (let context of selectAppContexts(this, permission)) {
+			context.send("appevent", type, event);
+		}
+	}
+
 	@boundMethod
 	async clientClicked() {
 		if (this.activeRightclick) {
@@ -162,7 +169,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 		if (true) {
 			//need to wait for 2 frames to get rendered (doublebuffered)
 			await delay(2 * 50);
-			let mousepos = this.getClientMouse();
+			let mousepos = this.screenToClient(electron.screen.getCursorScreenPoint());
 			let captrect = new Rect(mousepos.x - 300, mousepos.y - 300, 600, 600);
 			captrect.intersect({ x: 0, y: 0, ...this.getClientSize() });
 			let capt = this.capture(captrect);
@@ -171,6 +178,17 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 			if (reader.find(img)) {
 				new ActiveRightclick(this, reader, new ImgRefData(capt, captrect.x, captrect.y));
 				//TODO run rightclicked event
+			}
+		}
+	}
+
+	setActive(active: boolean) {
+		if (active != this.isActive) {
+			this.isActive = active;
+			if (this.isActive) {
+				this.emitAppEvent("", "rsfocus", { eventName: "rsfocus" });
+			} else {
+				this.emitAppEvent("", "rsblur", { eventName: "rsblur" });
 			}
 		}
 	}
@@ -187,10 +205,6 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 		return { x: p.x + rsrect.x, y: p.y + rsrect.y };
 	}
 
-	getClientMouse() {
-		return this.screenToClient(electron.screen.getCursorScreenPoint());
-	}
-
 	getClientSize() {
 		//TODO this doesn't account for scaling
 		let rect = this.window.getClientBounds();
@@ -203,7 +217,8 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 	}
 
 	alt1Pressed() {
-		let mousepos = this.getClientMouse();
+		let mousescreen = electron.screen.getCursorScreenPoint();
+		let mousepos = this.screenToClient(mousescreen);
 		let captrect = new Rect(mousepos.x - 300, mousepos.y - 300, 600, 600);
 		captrect.intersect({ x: 0, y: 0, ...this.getClientSize() });
 		if (!captrect.containsPoint(mousepos.x, mousepos.y)) { throw new Error("alt+1 pressed outside client"); }
@@ -220,7 +235,14 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 		else {
 			console.log("no text found under cursor")
 		}
-		//TODO run alt1pressed event
+		this.emitAppEvent("", "alt1pressed", {
+			eventName: "alt1pressed",
+			text: res?.line.text || "",
+			rsLinked: true,//event is no emited in new api if this is not true
+			x: mousepos.x, y: mousepos.y,
+			mouseAbs: mousescreen,
+			mouseRs: mousepos
+		});
 	}
 
 	overlayCommands(frameid: number, commands: OverlayCommand[]) {

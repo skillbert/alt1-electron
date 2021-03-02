@@ -7,19 +7,19 @@ import { MenuItemConstructorOptions, nativeImage } from "electron/common";
 import { handleSchemeArgs, handleSchemeCommand } from "./schemehandler";
 import { patchImageDataShow, readJsonWithBOM, relPath, rsClientExe, sameDomainResolve, schemestring, weborigin } from "./lib";
 import { identifyApp } from "./appconfig";
-import { getActiveWindow, native, OSWindow, OSWindowPin, reloadAddon } from "./native";
+import { getActiveWindow, native, OSNullWindow, OSWindow, OSWindowPin, reloadAddon } from "./native";
 import { detectInstances, getActiveInstance, RsInstance, rsInstances } from "./rsinstance";
 import { OverlayCommand, Rectangle } from "./shared";
-import { Bookmark, loadSettings, saveSettings, settings } from "./settings";
+import { AppPermission, Bookmark, loadSettings, saveSettings, settings } from "./settings";
+import type { Alt1EventType } from "@alt1/base";
 
 
 if (process.env.NODE_ENV === "development") {
 	patchImageDataShow();
+	//exposed on global for debugging purposes
+	(global as any).native = require("./native");
+	(global as any).Alt1lite = require("./main");
 }
-
-//exposed on global for debugging purposes
-(global as any).native = require("./native");
-(global as any).Alt1lite = require("./main");
 
 export const managedWindows: ManagedWindow[] = [];
 export function getManagedWindow(w: webContents) { return managedWindows.find(q => q.window.webContents == w); }
@@ -39,11 +39,9 @@ app.on("before-quit", e => {
 	saveSettings();
 });
 app.on("second-instance", (e, argv, cwd) => handleSchemeArgs(argv));
-app.on('window-all-closed', e => e.preventDefault());
-app.once('ready', () => {
-
+app.on("window-all-closed", e => e.preventDefault());
+app.once("ready", () => {
 	globalShortcut.register("Alt+1", alt1Pressed);
-
 	drawTray();
 	initIpcApi();
 });
@@ -96,7 +94,7 @@ class ManagedWindow {
 			app.wasOpen = true;
 		});
 		this.window.loadFile(path.resolve(__dirname, "appframe/index.html"));
-		//this.window.webContents.openDevTools();
+		this.window.webContents.openDevTools();
 		this.window.once("close", () => {
 			managedWindows.splice(managedWindows.indexOf(this), 1);
 			this.windowPin.unpin();
@@ -155,6 +153,18 @@ export function showSettings() {
 	settingsWnd.once("closed", e => settingsWnd = null);
 }
 
+//TODO add permission
+export function* selectAppContexts(rsinstance: RsInstance | null, permission: AppPermission | "") {
+	for (let wnd of managedWindows) {
+		if (rsinstance && rsinstance != wnd.rsClient) { continue; }
+		//TODO move this to method on appconfig instead
+		if (permission && !wnd.appConfig.permissions.includes(permission)) { continue; }
+		if (wnd.appFrameId == -1) { continue; }
+		let webcontent = electron.WebContents.fromId(wnd.appFrameId);
+		yield webcontent;
+	}
+}
+
 function initIpcApi() {
 	ipcMain.on("identifyapp", async (e, configurl) => {
 		try {
@@ -180,25 +190,26 @@ function initIpcApi() {
 
 	ipcMain.on("rsbounds", (e) => {
 		let wnd = getManagedAppWindow(e.sender.id);
+		if (!wnd?.rsClient.window) { throw new Error("rs window not found"); }
 		e.returnValue = { value: wnd?.rsClient.window.getClientBounds() };
 	});
 
 	ipcMain.handle("capture", (e, x, y, w, h) => {
 		let wnd = getManagedAppWindow(e.sender.id);
-		if (!wnd?.rsClient.window) { throw new Error("capture window not found"); }
+		if (!wnd?.rsClient.window) { throw new Error("rs window not found"); }
 		return native.captureWindow(wnd.rsClient.window.handle, x, y, w, h);
 	});
 
 	ipcMain.handle("capturemulti", (e, rects: { [key: string]: Rectangle }) => {
 		let wnd = getManagedAppWindow(e.sender.id);;
-		if (!wnd?.rsClient.window) { throw new Error("capture window not found"); }
+		if (!wnd?.rsClient.window) { throw new Error("rs window not found"); }
 		return native.captureWindowMulti(wnd.rsClient.window.handle, rects);
 	});
 
 	ipcMain.on("overlay", (e, commands: OverlayCommand[]) => {
 		let wnd = getManagedAppWindow(e.sender.id);
 		//TODO errors here are not rethrown in app, just swallow and log them
-		if (!wnd?.rsClient.window) { throw new Error("capture window not found"); }
+		if (!wnd?.rsClient.window) { throw new Error("rs window not found"); }
 		wnd.rsClient.overlayCommands(wnd.appFrameId, commands);
 	});
 }

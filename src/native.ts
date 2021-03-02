@@ -29,12 +29,17 @@ reloadAddon();
 
 //(Re)loads the native code, this gives all kinds of mem leaks and other trouble if called more than once, only do so for debugging
 export function reloadAddon() {
-	//Copy the addon file so we can rebuild while alt1lite is already running
+	//TODO fix hardcoded build path
 	let addonpath = path.resolve(__dirname, "../build/Debug/");
-	let tmpfile = path.resolve(addonpath, "addon" + Math.floor(Math.random() * 1000) + ".node");
-	let origfile = path.resolve(addonpath, "addon.node");
-	fs.copyFileSync(origfile, tmpfile);
-	native = __non_webpack_require__(tmpfile);
+
+	//Copy the addon file so we can rebuild while alt1lite is already running
+	if (process.env.NODE_ENV === "development") {
+		let tmpfile = path.resolve(addonpath, "addon" + Math.floor(Math.random() * 1000) + ".node");
+		let origfile = path.resolve(addonpath, "addon.node");
+		fs.copyFileSync(origfile, tmpfile);
+		addonpath = tmpfile;
+	}
+	native = __non_webpack_require__(addonpath);
 }
 
 type windowEvents = {

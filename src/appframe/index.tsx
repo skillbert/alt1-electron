@@ -25,7 +25,9 @@ function AppFrame(p: {}) {
 
 	let [rightclickArea, setRightclickArea] = useState(null as RectLike | null);
 	let [minimized, setMinimized] = useState(false);
+	let rootref = useRef(null);
 
+	//app webview
 	useLayoutEffect(() => {
 		let view = document.createElement("webview");
 		view.className = "appframe";
@@ -56,11 +58,16 @@ function AppFrame(p: {}) {
 		return () => { appview = null };
 	}, []);
 
+	//rightclick even listener
 	useLayoutEffect(() => {
 		let handler = (e: any, rect: RectLike | null) => setRightclickArea(rect);
 		ipcRenderer.on("rightclick", handler);
 		return () => { ipcRenderer.off("rightclick", handler); };
 	}, []);
+
+	//transparent window clickthrough handler
+	//https://github.com/electron/electron/issues/1335
+	useLayoutEffect(clickThroughEffect.bind(null, minimized, rightclickArea, rootref), [minimized, rightclickArea]);
 
 	let appstyle: React.CSSProperties = {};
 	if (rightclickArea) {
@@ -81,7 +88,7 @@ function AppFrame(p: {}) {
 	}
 
 	return (
-		<div className="approot" style={appstyle}>
+		<div className="approot" style={appstyle} ref={rootref}>
 			<div className="appgrid" ref={el} style={{ display: minimized ? "none" : "", ...appstyle }} >
 				<BorderEl ver="top" hor="left" />
 				<BorderEl ver="top" hor="" />
@@ -150,4 +157,50 @@ function startDrag(factors: { x: number, y: number, w: number, h: number }) {
 		window.addEventListener("mousemove", moved);
 		window.addEventListener("mouseup", cleanup, { once: true });
 	}
+}
+
+function clickThroughEffect(minimized: boolean, rc: RectLike, rootref: React.MutableRefObject<any>) {
+	let root = rootref.current as HTMLElement;
+	if (minimized || rc) {
+		//mouse move event forwarding is only supported on windows
+		if (process.platform == "win32") {
+			//TODO check if this actually works when element is hidden while being hovered
+			let currenthover = root.matches(":hover");
+			thiswindow.window.setIgnoreMouseEvents(!currenthover, { forward: true });
+			let handler = (e: MouseEvent) => {
+				thiswindow.window.setIgnoreMouseEvents(e.type == "mouseleave", { forward: true });
+			};
+			root.addEventListener("mouseenter", handler);
+			root.addEventListener("mouseleave", handler);
+			return () => {
+				root.removeEventListener("mouseenter", handler);
+				root.removeEventListener("mouseleave", handler);
+			}
+		}
+
+		//fall back to polling approach
+		let clickableels: DOMRect[] = [];
+		if (minimized) {
+			clickableels = [...document.querySelectorAll(".button,.dragbutton") as any as HTMLElement[]].map(e => e.getBoundingClientRect());
+		}
+		let checkmouse = () => {
+			let mousescreen = remote.screen.getCursorScreenPoint();
+			let client = thiswindow.nativeWindow.getClientBounds();
+			//TODO scaling/zoom
+			let mx = mousescreen.x - client.x;
+			let my = mousescreen.y - client.y;
+			let ignore = false;
+			if (minimized) {
+				ignore = !clickableels.some(e => mx >= e.left && mx < e.right && my >= e.top && my < e.bottom);
+			}
+			if (rc && mx >= rc.x && my < rc.x + rc.width && my >= rc.y && my < rc.y + rc.height) {
+				ignore = true;
+			}
+			thiswindow.window.setIgnoreMouseEvents(ignore);
+		};
+		checkmouse();
+		let timer = setInterval(checkmouse, 100);
+		return () => clearInterval(timer);
+	}
+	thiswindow.window.setIgnoreMouseEvents(false);
 }
