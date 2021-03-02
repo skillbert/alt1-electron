@@ -12,13 +12,6 @@ function warn(key: string, message: string) {
 	}
 }
 
-function removedApi(): never {
-	throw new Error("this API has been removed, use one of the npm @alt1/* packages instead");
-}
-function notImplemented(): never {
-	throw new Error("Not implemented yet");
-}
-
 ipcRenderer.on("appevent", <T extends keyof alt1types.Alt1EventType>(e, type: T, appevent: alt1types.Alt1EventType[T]) => {
 	try {
 		if (type == "alt1pressed" && (window as any).alt1onrightclick) {
@@ -171,22 +164,22 @@ var alt1api: Partial<typeof alt1> = {
 	},
 
 	//TODO
-	bindFindSubImg: notImplemented,
-	getRegionMulti: notImplemented,
-	registerStatusDaemon: notImplemented,
-	showNotification: notImplemented,
-	setTaskbarProgress: notImplemented,
-	setTitleBarText: notImplemented,
-	userResize: notImplemented,
+	// bindFindSubImg: ,
+	// getRegionMulti: ,
+	// registerStatusDaemon: ,
+	// showNotification: ,
+	// setTaskbarProgress: ,
+	// setTitleBarText: ,
+	// userResize: ,
 
 	//no plans to implement
-	addOCRFont: removedApi,
-	bindReadColorString: removedApi,
-	bindReadRightClickString: removedApi,
-	bindReadString: removedApi,
-	bindReadStringEx: removedApi,
-	bindScreenRegion: removedApi,
-	clearBinds: removedApi,
+	// addOCRFont: ,
+	// bindReadColorString: ,
+	// bindReadRightClickString: ,
+	// bindReadString: ,
+	// bindReadStringEx: ,
+	// bindScreenRegion: ,
+	// clearBinds: ,
 
 };
 

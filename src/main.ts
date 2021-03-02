@@ -94,7 +94,7 @@ class ManagedWindow {
 			app.wasOpen = true;
 		});
 		this.window.loadFile(path.resolve(__dirname, "appframe/index.html"));
-		this.window.webContents.openDevTools();
+		//this.window.webContents.openDevTools();
 		this.window.once("close", () => {
 			managedWindows.splice(managedWindows.indexOf(this), 1);
 			this.windowPin.unpin();
