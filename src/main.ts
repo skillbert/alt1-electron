@@ -76,23 +76,38 @@ class ManagedWindow {
 	appFrameId = -1;
 
 	constructor(app: Bookmark, rsclient: RsInstance) {
+		let posrect = app.lastRect;
+		if (!posrect) {
+			posrect = {
+				left: 20, top: 20, width: app.defaultWidth, height: app.defaultHeight,
+				bot: 0, right: 0,
+				pinning: ["top", "left"]
+			};
+			app.lastRect = posrect;
+		}
+
 		this.window = new BrowserWindow({
 			webPreferences: { nodeIntegration: true, webviewTag: true, enableRemoteModule: true },
 			frame: false,
-			width: app.defaultWidth,
-			height: app.defaultHeight,
+			width: posrect.width,
+			height: posrect.height,
 			transparent: true
 		});
 
+		this.nativeWindow = new OSWindow(this.window.getNativeWindowHandle());
 		this.rsClient = rsclient;
 		this.appConfig = app;
 
-		this.nativeWindow = new OSWindow(this.window.getNativeWindowHandle());
 		this.windowPin = new OSWindowPin(this.nativeWindow, this.rsClient.window, "auto");
 		this.windowPin.once("close", () => {
 			this.window.close();
 			app.wasOpen = true;
 		});
+		this.windowPin.on("moved", () => {
+			app.lastRect = this.windowPin.getPinRect();
+		});
+		this.windowPin.setPinRect(posrect);
+
 		this.window.loadFile(path.resolve(__dirname, "appframe/index.html"));
 		//this.window.webContents.openDevTools();
 		this.window.once("close", () => {

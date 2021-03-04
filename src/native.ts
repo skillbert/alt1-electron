@@ -3,6 +3,7 @@ import * as fs from "fs";
 import { Rectangle } from "./shared";
 import { boundMethod } from "autobind-decorator";
 import { TypedEmitter } from "./typedemitter";
+import { PinRect } from "./settings";
 
 
 export var native: {
@@ -109,6 +110,29 @@ export class OSWindowPin extends TypedEmitter<OSWindowPinEvents>{
 		native.setWindowParent(window.handle, parent.handle);
 		this.parent.on("move", this.onmove);
 		this.parent.on("close", this.onclose);
+	}
+	setPinRect(rect: PinRect) {
+		let isleft = rect.pinning.includes("left");
+		this.pinhor = isleft ? "left" : "right";
+		this.wndhordist = isleft ? rect.left : rect.right;
+		this.wndwidth = rect.width;
+		let istop = rect.pinning.includes("top");
+		this.pinver = istop ? "top" : "bot";
+		this.wndverdist = istop ? rect.top : rect.bot;
+		this.wndheight = rect.height;
+		this.synchPosition();
+	}
+	getPinRect() {
+		let r: PinRect = {
+			left: this.pinhor == "left" ? this.wndhordist : 0,
+			right: this.pinhor == "right" ? this.wndhordist : 0,
+			top: this.pinver == "top" ? this.wndverdist : 0,
+			bot: this.pinver == "bot" ? this.wndverdist : 0,
+			height: this.wndheight,
+			width: this.wndwidth,
+			pinning: [this.pinver, this.pinhor]
+		};
+		return r;
 	}
 	unpin() {
 		native.setWindowParent(this.window.handle, BigInt(0));

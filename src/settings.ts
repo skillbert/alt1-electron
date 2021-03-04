@@ -5,8 +5,19 @@ import { identifyApp } from "./appconfig";
 import fetch from "node-fetch";
 
 export type AppPermission = UservarType<typeof checkPermission>;
+export type PinRect = UservarType<typeof checkPinRect>;
 
 var checkPermission = Checks.strenum({ "pixel": "Pixel", "overlay": "Overlay", "game": "Game Data" });
+
+var checkPinRect = Checks.obj({
+	left: Checks.num(),
+	right: Checks.num(),
+	bot: Checks.num(),
+	top: Checks.num(),
+	width: Checks.num(),
+	height: Checks.num(),
+	pinning: Checks.arr(Checks.strenum({ "left": "Left", "top": "Top", "right": "Right", "bot": "Bottom" }))
+});
 
 var checkBookmark = Checks.obj({
 	appName: Checks.str(),
@@ -21,15 +32,7 @@ var checkBookmark = Checks.obj({
 	maxWidth: Checks.num(undefined, 0),
 	maxHeight: Checks.num(undefined, 0),
 	permissions: Checks.arr(checkPermission),
-	lastRect: Checks.opt(Checks.obj({
-		left: Checks.num(),
-		right: Checks.num(),
-		bot: Checks.num(),
-		top: Checks.num(),
-		width: Checks.num(),
-		height: Checks.num(),
-		pinning: Checks.arr(Checks.strenum({ "left": "Left", "top": "Top", "right": "Right", "bot": "Bottom" }))
-	})),
+	lastRect: Checks.opt(checkPinRect),
 	wasOpen: Checks.bool(),
 	iconCached: Checks.str(),
 	iconCachedTime: Checks.num(),
