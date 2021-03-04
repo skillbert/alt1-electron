@@ -221,6 +221,7 @@ struct WindowsEventHook {
 struct TrackedEvent {
 	OSWindow wnd;
 	WindowEventType type;
+	int lastCalledId = 0;//used to determine if this callback was called already
 	Napi::FunctionReference callback;
 	std::vector<std::shared_ptr<WindowsEventHook>> hooks;
 	TrackedEvent(OSWindow wnd, WindowEventType type, Napi::Function cb);
@@ -270,6 +271,28 @@ void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function c
 	}
 }
 
+//used to determine which callbacks we called already
+int hookprocCount = 0;
+
+//need this weird function to deal with the possibility of the list being modified from the js callback
+//tracker is a lambda function that returns true if the callback was called
+template<typename F,typename COND>
+void iterateHandlers(COND cond, F tracker) {
+	hookprocCount++;
+	bool changed;
+	do {
+		changed = false;
+		for (auto it = windowHandlers.begin(); it != windowHandlers.end(); it++) {
+			if (it->lastCalledId != hookprocCount && cond(*it)) {
+				it->lastCalledId = hookprocCount;
+				changed = true;
+				tracker(*it);
+				break;
+			}
+		}
+	} while (changed);
+}
+
 void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD idEventThread, DWORD dwmsEventTime) {
 	OSWindow wnd(hwnd);
 
@@ -277,52 +300,52 @@ void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject
 	switch (event) {
 	case EVENT_OBJECT_STATECHANGE:
 	case EVENT_OBJECT_DESTROY:
-		for (const auto& h : windowHandlers) {
-			if (hwnd == h.wnd.hwnd && h.type == WindowEventType::Close) {
+		iterateHandlers(
+			[&](const TrackedEvent& h) {return hwnd == h.wnd.hwnd && h.type == WindowEventType::Close; },
+			[&](const TrackedEvent& h) {
 				auto env = h.callback.Env();
 				Napi::HandleScope scope(env);
 				//TODO more intelligent way to deal with js land callback errors?
 				try { h.callback.MakeCallback(env.Global(), {}); }
 				catch (...) {}
-			}
-		}
+			});
 		break;
 	case EVENT_SYSTEM_CAPTURESTART: {
 		auto windowhwnd = GetAncestor(hwnd, GA_ROOT);
-		for (const auto& h : windowHandlers) {
-			if (windowhwnd == h.wnd.hwnd && h.type == WindowEventType::Click) {
+		iterateHandlers(
+			[&](const TrackedEvent& h) {return windowhwnd == h.wnd.hwnd && h.type == WindowEventType::Click; },
+			[&](const TrackedEvent& h) {
 				auto env = h.callback.Env();
 				Napi::HandleScope scope(env);
 				try { h.callback.MakeCallback(env.Global(), {}); }
 				catch (...) {}
-			}
-		}
+			});
 		break; }
 	case EVENT_SYSTEM_MOVESIZESTART:
 	case EVENT_SYSTEM_MOVESIZEEND:
 	case EVENT_OBJECT_LOCATIONCHANGE: {
 		JSRectangle bounds = wnd.GetBounds();
 		const char* phase = (event == EVENT_SYSTEM_MOVESIZEEND ? "end" : event == EVENT_SYSTEM_MOVESIZESTART ? "start" : "moving");
-		for (const auto& h : windowHandlers) {
-			if (hwnd == h.wnd.hwnd && h.type == WindowEventType::Move) {
+		iterateHandlers(
+			[&](const TrackedEvent& h) {return hwnd == h.wnd.hwnd && h.type == WindowEventType::Move; },
+			[&](const TrackedEvent& h) {
 				auto env = h.callback.Env();
 				Napi::HandleScope scope(env);
 				try { h.callback.MakeCallback(env.Global(), { bounds.ToJs(env),Napi::String::New(env, phase) }); }
 				catch (...) {}
-			}
-		}
+			});
 		break; }
 	case EVENT_OBJECT_UNCLOAKED:
 	case EVENT_SYSTEM_FOREGROUND:
 	case EVENT_OBJECT_SHOW: {
-		for (const auto& h : windowHandlers) {
-			if ((h.wnd.hwnd == 0 || hwnd == h.wnd.hwnd) && h.type == WindowEventType::Show) {
+		iterateHandlers(
+			[&](const TrackedEvent& h) {return (h.wnd.hwnd == 0 || hwnd == h.wnd.hwnd) && h.type == WindowEventType::Show; },
+			[&](const TrackedEvent& h) {
 				auto env = h.callback.Env();
 				Napi::HandleScope scope(env);
 				try { h.callback.MakeCallback(env.Global(), { Napi::BigInt::New(env,(uint64_t)hwnd),Napi::Number::New(env,event) }); }
 				catch (...) {}
-			}
-		}
+			});
 		break; }
 	}
 }
