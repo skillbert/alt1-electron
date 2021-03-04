@@ -21,12 +21,11 @@ import RightClickReader from "./readers/rightclick";
 
 export var rsInstances: RsInstance[] = [];
 
-function init() {
+export function initRsInstanceTracking() {
 	detectInstances();
 	//TODO this event current fires in many situations, one being simply the active window changing
 	OSNullWindow.on("show", windowCreated);
 };
-setImmediate(init);
 
 function windowCreated(handle: BigInt) {
 	if (handle == BigInt(0)) { return; }
@@ -40,7 +39,7 @@ function windowCreated(handle: BigInt) {
 		let title = wnd.getTitle();
 		//TODO there is currently an issue where it will pin the wrong hwnd of the rs process and this is not recoverable
 		if (title.startsWith("RuneScape") && processname == rsClientExe) {
-			new RsInstance(pid);
+			new RsInstance(wnd);
 		}
 	}
 	rsInstances.forEach(i => i.setActive(wndinst == i));
@@ -56,7 +55,7 @@ export function detectInstances() {
 	for (let pid of pids) {
 		let inst = rsInstances.find(q => q.pid == pid);
 		if (!inst) {
-			new RsInstance(pid);
+			new RsInstance(new OSWindow(native.getProcessMainWindow(pid)));
 		}
 	}
 }
@@ -136,10 +135,10 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 	isActive = false;
 	lastBlurTime = 0;
 
-	constructor(pid: number) {
+	constructor(rswindow: OSWindow) {
 		super();
-		this.pid = pid;
-		this.window = new OSWindow(native.getProcessMainWindow(pid));
+		this.pid = native.getWindowPid(rswindow.handle);
+		this.window = rswindow;
 		this.window.on("close", this.close);
 		this.window.on("click", this.clientClicked);
 		this.overlayWindow = null;
@@ -152,7 +151,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 		}
 
 		rsInstances.push(this);
-		console.log(`new rs client tracked with pid: ${pid}`);
+		console.log(`new rs client tracked with pid: ${this.pid}`);
 	}
 
 	@boundMethod
@@ -272,7 +271,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 			console.log("opening overlay");
 			let bounds = this.window.getClientBounds();
 			let browser = new BrowserWindow({
-				webPreferences: { nodeIntegration: true, webviewTag: true, enableRemoteModule: true },
+				webPreferences: { nodeIntegration: true },
 				frame: false,
 				transparent: true,
 				x: bounds.x,
@@ -282,13 +281,13 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 				show: false,
 				//resizable: false,
 				movable: false,
-				skipTaskbar: true
+				skipTaskbar: true,
+				focusable: false
 			});
 
 			let nativewnd = new OSWindow(browser.getNativeWindowHandle());
 			let pin = new OSWindowPin(nativewnd, this.window, "cover");
 			browser.loadFile(path.resolve(__dirname, "overlayframe/index.html"));
-			//browser.webContents.openDevTools();
 			browser.once("ready-to-show", () => {
 				browser.show();
 			});

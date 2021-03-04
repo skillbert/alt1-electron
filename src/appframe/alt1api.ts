@@ -83,6 +83,10 @@ function sendOverlayQueue() {
 	overlayDebounceCommands = [];
 }
 
+function setTooltip(text: string) {
+	ipcRenderer.send("settooltip", text);
+}
+
 //TODO use contextBridge.exposeInMainWorld
 var alt1api: Partial<typeof alt1> = {
 
@@ -139,8 +143,8 @@ var alt1api: Partial<typeof alt1> = {
 	overLayContinueGroup(groupid) { queueOverlayCommand({ command: "continuegroup", groupid }); },
 	overLayClearGroup(groupid) { queueOverlayCommand({ command: "cleargroup", groupid }); },
 	overLayRefreshGroup(groupid) { queueOverlayCommand({ command: "refreshgroup", groupid }); },
-	setTooltip(str) { return true; },
-	clearTooltip() { alt1api.setTooltip!(""); },
+	setTooltip(str) { setTooltip(str); return true; },
+	clearTooltip() { setTooltip(""); },
 
 	//new API's
 	capture(x, y, width, height) {
