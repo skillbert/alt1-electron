@@ -49,18 +49,29 @@ This has been the most long standing request. Starting from scratch with other p
 - mp4 works! (twitch)
 	- still no widevine CDM so no netflix
 - changes in app libs use new fast capture API
+- rightclick detection
+- basic alt+1 hotkey detection
 
 **Missing features**
 - Toolbar
-- Unix/Mac implementation of OS calls in os.h
+- Unix/Mac implementation incomplete
 - Settings window
+	- installed apps
 	- capture mode previews and troubleshoot
+- add app window
+- browser handlers
+	- alt1:// protocol from internal browser
+	- remove toolbar on popups
+	- rightclick menu
 - Rewrite OpenGl capture
 - App resize visual snapping
 - Shippebleness in general
-- Screenshot sharing (alt+2)
 - alt+1 hotkey
-- rightclick detection and app cutout
+	- app triggers
+- statusdaemon
+- Independent modules
+	- Screenshot sharing (alt+2)
+	- Window manipulation tool (alt+3)
 
 **TODO**
 - Actually implement capture method toggle
@@ -73,6 +84,7 @@ This has been the most long standing request. Starting from scratch with other p
 - Clean up native event situation for windows
 - Enable contextisolation in appwindow
 - Think some more about the name
+
 
 # Extension projects
 These concepts don't exist in C# Alt1 but are now possible.
