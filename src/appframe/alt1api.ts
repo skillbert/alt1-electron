@@ -40,10 +40,17 @@ function imagedataToBase64(img: FlatImageData) {
 	const btoachars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 	let str = "";
 	let data = img.data;
-	//3 bytes -> 4 chars repeating pattern
-	for (var a = 0; a + 3 < data.length; a += 3) {
-		let b1 = data[a + 0], b2 = data[a + 1], b3 = data[a + 2];
-		str += btoachars[(b1 >> 2) & 0x3f] + btoachars[((b1 << 4) | (b2 >> 4)) & 0x3f] + btoachars[((b2 << 2) | (b3 >> 6)) & 0x3f] + btoachars[(b3) & 0x3f];
+	//flip rgba to bgra and convert into base64 in one pass
+	//12 bytes = 3 pixels -> 16 chars repeating pattern
+	//[bgra][bgra][bgra] -> [rgb][arg][bar][gba] (3 bytes encodes into 4 base64 chars)
+	for (var a = 0; a + 3 < data.length; a += 12) {
+		let b0 = data[a + 0], g0 = data[a + 1], r0 = data[a + 2], a0 = data[a + 3];
+		let b1 = data[a + 4], g1 = data[a + 5], r1 = data[a + 6], a1 = data[a + 7];
+		let b2 = data[a + 8], g2 = data[a + 9], r2 = data[a + 10], a2 = data[a + 11];
+		str += btoachars[(r0 >> 2) & 0x3f] + btoachars[((r0 << 4) | (g0 >> 4)) & 0x3f] + btoachars[((g0 << 2) | (b0 >> 6)) & 0x3f] + btoachars[(b0) & 0x3f];
+		str += btoachars[(a0 >> 2) & 0x3f] + btoachars[((a0 << 4) | (r1 >> 4)) & 0x3f] + btoachars[((r1 << 2) | (g1 >> 6)) & 0x3f] + btoachars[(g1) & 0x3f];
+		str += btoachars[(b1 >> 2) & 0x3f] + btoachars[((b1 << 4) | (a1 >> 4)) & 0x3f] + btoachars[((a1 << 2) | (r2 >> 6)) & 0x3f] + btoachars[(r2) & 0x3f];
+		str += btoachars[(g2 >> 2) & 0x3f] + btoachars[((g2 << 4) | (b2 >> 4)) & 0x3f] + btoachars[((b2 << 2) | (a2 >> 6)) & 0x3f] + btoachars[(a2) & 0x3f];
 	}
 	//use naive approach for left over bytes and let native btoa deal with ending bytes
 	let endstr = "";
