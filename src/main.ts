@@ -271,11 +271,12 @@ function initIpcApi() {
 		}
 	});
 
-	ipcMain.on("capturesync", (e, x, y, w, h) => {
+	ipcMain.on("capturesync", (e, x, y, width, height) => {
 		try {
 			let wnd = getManagedAppWindow(e.sender.id);
 			if (!wnd?.rsClient.window) { throw new Error("capture window not found"); }
-			e.returnValue = { value: { width: w, height: h, data: native.captureWindow(wnd.rsClient.window.handle, x, y, w, h) } };
+			let capt = native.captureWindowMulti(wnd.rsClient.window.handle, settings.captureMode, { main: { x, y, width, height } });
+			e.returnValue = { value: { width, height, data: capt.main } };
 		} catch (err) {
 			e.returnValue = { error: "" + err };
 		}
@@ -292,21 +293,22 @@ function initIpcApi() {
 			clientRect: wnd.rsClient.window.getClientBounds(),
 			lastBlurTime: wnd.rsClient.lastBlurTime,
 			ping: 10,//TODO
-			scaling: 1//TODO
+			scaling: 1,//TODO
+			captureMode: settings.captureMode
 		};
 		e.returnValue = { value: state };
 	});
 
-	ipcMain.handle("capture", (e, x, y, w, h) => {
+	ipcMain.handle("capture", (e, x, y, width, height) => {
 		let wnd = getManagedAppWindow(e.sender.id);
 		if (!wnd?.rsClient.window) { throw new Error("rs window not found"); }
-		return native.captureWindow(wnd.rsClient.window.handle, x, y, w, h);
+		return native.captureWindowMulti(wnd.rsClient.window.handle, settings.captureMode, { main: { x, y, width, height } }).main;
 	});
 
 	ipcMain.handle("capturemulti", (e, rects: { [key: string]: Rectangle }) => {
 		let wnd = getManagedAppWindow(e.sender.id);;
 		if (!wnd?.rsClient.window) { throw new Error("rs window not found"); }
-		return native.captureWindowMulti(wnd.rsClient.window.handle, rects);
+		return native.captureWindowMulti(wnd.rsClient.window.handle, settings.captureMode, rects);
 	});
 
 	ipcMain.on("settooltip", (e, text: string) => {

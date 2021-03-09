@@ -22,6 +22,15 @@ typedef unsigned char byte;
 //state storage per context
 struct PluginInstance {};
 
+enum class CaptureMode {
+	//Capture the desktop pixels relative to target window
+	Desktop = 0,
+	//Capture the window front buffer directly, before os scaling is applied
+	Window = 1,
+	//Capture the opengl front buffer directly from the rs client process, this mode is much more complicated and only works on windows right now
+	OpenGL = 2
+};
+
 struct JSRectangle {
 	int x;
 	int y;

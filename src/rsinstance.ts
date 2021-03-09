@@ -233,8 +233,8 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 	}
 
 	capture(rect: RectLike) {
-		let capt = native.captureWindow(this.window.handle, rect.x, rect.y, rect.width, rect.height);
-		return new ImageData(capt, rect.width, rect.height);
+		let capt = native.captureWindowMulti(this.window.handle, settings.captureMode, { main: rect });
+		return new ImageData(capt.main, rect.width, rect.height);
 	}
 
 	alt1Pressed() {

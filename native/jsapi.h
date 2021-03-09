@@ -3,14 +3,11 @@
 #include "../libs/Alt1Native.h"
 
 
-enum class CaptureMode { Desktop = 0, Window = 1, OpenGL = 2 };
-const char* captureModeText[] = { "desktop","window","opengl" };
-
-#ifdef OPENGL_SUPPORTED
-CaptureMode capturemode = CaptureMode::OpenGL;
-#else
-CaptureMode capturemode = CaptureMode::Window;
-#endif
+const std::map<CaptureMode, std::string> captureModeText = {
+	{CaptureMode::Desktop,"desktop"},
+	{CaptureMode::Window,"window"},
+	{CaptureMode::OpenGL,"opengl"}
+};
 
 std::map<OSWindow, Alt1Native::HookedProcess*> hookedWindows;
 
@@ -26,80 +23,27 @@ Napi::Value HookWindow(const Napi::CallbackInfo& info) {
 #endif
 }
 
-void CaptureWindowMultiAuto(OSWindow wnd, CaptureMode mode, vector<CaptureRect> rects, Napi::Env env) {
-	for (const auto& capt : rects) {
-		if (capt.rect.width <= 0 || capt.rect.height <= 0 || capt.rect.width > 1e4 || capt.rect.height > 1e4)
-		{
-			throw Napi::TypeError::New(env, "invalid capture size");
-		}
-	}
-	switch (mode) {
-	case CaptureMode::Desktop: {
-		//TODO double check and document desktop 0 special case
-		auto offset = wnd.GetClientBounds();
-		auto mapped = vector<CaptureRect>(rects);
-		for (auto& capt : mapped) {
-			capt.rect.x += offset.x;
-			capt.rect.y += offset.y;
-		}
-		OSCaptureDesktopMulti(rects);
-		break;
-	}
-	case CaptureMode::Window:
-		OSCaptureWindowMulti(wnd, rects);
-		break;
-	case CaptureMode::OpenGL: {
-#ifdef OPENGL_SUPPORTED
-		auto handle = Alt1Native::HookProcess(wnd.hwnd);
-		vector<JSRectangle> rawrects(rects.size());
-		for (int i = 0; i < rects.size(); i++) {
-			rawrects[i] = rects[i].rect;
-		}
-		auto pixeldata = Alt1Native::CaptureMultiple(handle, &rawrects[0], rawrects.size());
-		if (!pixeldata) {
-			char errtext[200] = { 0 };
-			int len = Alt1Native::GetDebug(errtext, sizeof(errtext) - 1);
-			throw Napi::Error::New(env, string() + "Failed to capture, native error: " + errtext);
-		}
-		//TODO get rid of copy somehow? (src memory is shared ipc memory so not trivial)
-		size_t offset = 0;
-		for (int i = 0; i < rects.size(); i++) {
-			//TODO use correct pixel format in injectdll so this flip isnt needed
-			//copy and flip
-			flipBGRAtoRGBA(rects[i].data, pixeldata + offset, rects[i].size);
-			offset += (size_t)rawrects[i].width * rawrects[i].height * 4;
-		}
-		break;
-#else
-		Napi::Error::New(env, "OpenGL capture not supported on this platform").ThrowAsJavaScriptException();
-		break;
-#endif
-	}
-	default:
-		throw Napi::RangeError::New(env, "No capture mode selected");
-	}
-}
-
-Napi::Value CaptureWindow(const Napi::CallbackInfo& info) {
-	auto env = info.Env();
-	OSWindow wnd = OSWindow::FromJsValue(info[0]);
-	int x = info[1].As<Napi::Number>().Int32Value();
-	int y = info[2].As<Napi::Number>().Int32Value();
-	int w = info[3].As<Napi::Number>().Int32Value();
-	int h = info[4].As<Napi::Number>().Int32Value();
-
-	int totalbytes = w * h * 4;
-	auto buf = Napi::ArrayBuffer::New(env, totalbytes);
-	vector<CaptureRect> capt = { CaptureRect(buf.Data(),buf.ByteLength(),JSRectangle(x,y,w,h)) };
-	CaptureWindowMultiAuto(wnd, capturemode, capt, env);
-	auto arr = Napi::Uint8Array::New(env, totalbytes, buf, 0, napi_uint8_clamped_array);
-	return arr;
-}
-
 Napi::Value CaptureWindowMulti(const Napi::CallbackInfo& info) {
 	auto env = info.Env();
 	auto wnd = OSWindow::FromJsValue(info[0]);
-	auto obj = info[1].As<Napi::Object>();
+
+	//convert the capture mode string
+	auto captmodetext = info[1].As<Napi::String>().Utf8Value();
+	bool modematched = false;
+	CaptureMode captmode = CaptureMode::Desktop;
+	for (auto mode : captureModeText) {
+		if (mode.second == captmodetext) {
+			modematched = true;
+			captmode = mode.first;
+			break;
+		}
+	}
+	if (!modematched) {
+		throw Napi::RangeError::New(env, "unknown capture mode");
+	}
+
+	//convert the capture rect object to c++
+	auto obj = info[2].As<Napi::Object>();
 	auto props = obj.GetPropertyNames();
 	vector<CaptureRect> capts;
 	auto ret = Napi::Object::New(env);
@@ -109,6 +53,11 @@ Napi::Value CaptureWindowMulti(const Napi::CallbackInfo& info) {
 		auto val = obj.Get(key);
 		if (val.IsNull() || val.IsUndefined()) { continue; }
 		auto rect = JSRectangle::FromJsValue(val);
+		if (rect.width <= 0 || rect.height <= 0 || rect.width > 1e4 || rect.height > 1e4)
+		{
+			throw Napi::TypeError::New(env, "invalid capture size");
+		}
+
 		size_t size = (size_t)rect.width * rect.height * 4;
 		auto buffer = Napi::ArrayBuffer::New(env, size);
 		CaptureRect capt(buffer.Data(), buffer.ByteLength(), rect);
@@ -116,7 +65,7 @@ Napi::Value CaptureWindowMulti(const Napi::CallbackInfo& info) {
 		ret.Set(key, view);
 		capts.push_back(capt);
 	}
-	CaptureWindowMultiAuto(wnd, capturemode, capts, env);
+	OSCaptureMulti(wnd, captmode, capts, env);
 	return ret;
 }
 

@@ -18,7 +18,7 @@ ipcRenderer.on("appevent", <T extends keyof alt1types.Alt1EventType>(e, type: T,
 			warn("alt1onrightclick", "window.alt1onrightclick is depricated use the wrapper lib instead");
 			(window as any).alt1onrightclick(appevent);
 		}
-		if (Array.isArray(alt1.events[type])) {
+		if (alt1.events && Array.isArray(alt1.events[type])) {
 			for (let handler of alt1.events[type]) {
 				handler(appevent);
 			}
@@ -211,9 +211,9 @@ let getters: PropertyDescriptorMap = {
 	rsPing: { get() { return getRsInfo().ping; } },
 	rsScaling: { get() { return getRsInfo().scaling; } },
 	rsLinked: { get() { return true; } }, //can no longer open apps without rs
-	currentWorld: { get() { return 1; } },
+	captureMethod: { get() { return getRsInfo().captureMode; } },
 	//TODO
-	captureMethod: { get() { return "directx" } },
+	currentWorld: { get() { return 1; } },
 	lastWorldHop: { get() { return 0; } },
 	permissionGameState: { get() { return true; } },
 	permissionInstalled: { get() { return true; } },

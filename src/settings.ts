@@ -3,6 +3,7 @@ import * as fs from "fs";
 import { configFile, readJsonWithBOM, weborigin } from "./lib";
 import { identifyApp } from "./appconfig";
 import fetch from "node-fetch";
+import { CaptureMode } from "./native";
 
 export type AppPermission = UservarType<typeof checkPermission>;
 export type PinRect = UservarType<typeof checkPinRect>;
@@ -41,6 +42,7 @@ var checkBookmark = Checks.obj({
 export type Bookmark = UservarType<typeof checkBookmark>;
 
 var checkSettings = Checks.obj({
+	captureMode: Checks.strenum<CaptureMode>({ desktop: "Desktop", opengl: "OpenGL", window: "Window" }, "window"),
 	bookmarks: Checks.arr(checkBookmark)
 });
 
@@ -50,7 +52,7 @@ export var settings: UservarType<typeof checkSettings>
 export async function loadSettings() {
 	try {
 		let file = JSON.parse(fs.readFileSync("./config.json", "utf8"));
-		settings = checkSettings.load(file);
+		settings = checkSettings.load(file, { defaultOnError: true });
 	} catch (e) {
 		console.log("couldn't load config");
 		settings = checkSettings.default();

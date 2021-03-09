@@ -49,10 +49,7 @@ vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid);
 OSWindow OSFindMainWindow(unsigned long process_id);
 void OSSetWindowParent(OSWindow wnd, OSWindow parent);
 
-void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h);
-void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y, int w, int h);
-void OSCaptureDesktopMulti(vector<CaptureRect> rects);
-void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects);
+void OSCaptureMulti(OSWindow wnd, CaptureMode mode, vector<CaptureRect> rects, Napi::Env env);
 string OSGetProcessName(int pid);
 OSWindow OSGetActiveWindow();
 

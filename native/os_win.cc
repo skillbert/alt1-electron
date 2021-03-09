@@ -15,6 +15,10 @@ void OSWindow::SetBounds(JSRectangle bounds) {
 	SetWindowPos(hwnd, NULL, bounds.x, bounds.y, bounds.width, bounds.height, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
 }
 
+Napi::Value OSWindow::ToJS(Napi::Env env) {
+	return Napi::BigInt::New(env, (uint64_t)hwnd);
+}
+
 int OSWindow::GetPid() {
 	uint32_t pid = 0;
 	GetWindowThreadProcessId(this->hwnd, (DWORD*)&pid);
@@ -123,18 +127,6 @@ OSWindow OSFindMainWindow(unsigned long process_id)
 	return OSWindow(data.window_handle);
 }
 
-void OSCaptureDesktopMulti(vector<CaptureRect> rects) {
-	for (auto const& capt : rects) {
-		OSCaptureDesktop(capt.data, capt.size, capt.rect.x, capt.rect.y, capt.rect.width, capt.rect.height);
-	}
-}
-
-void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects) {
-	for (auto const& capt : rects) {
-		OSCaptureWindow(capt.data, capt.size, wnd, capt.rect.x, capt.rect.y, capt.rect.width, capt.rect.height);
-	}
-}
-
 void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
 	//show behind parent, then show parent behind self (no way to show in front in winapi)
 	if (parent.hwnd != 0) {
@@ -176,17 +168,59 @@ void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y,
 	ReleaseDC(NULL, hdc);
 	DeleteObject(hbDesktop);
 	DeleteDC(hDest);
-
 }
-
-Napi::Value OSWindow::ToJS(Napi::Env env) {
-	return Napi::BigInt::New(env, (uint64_t)hwnd);
-}
-
 
 void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h)
 {
 	return OSCaptureWindow(target, maxlength, NULL, x, y, w, h);
+}
+
+void OSCaptureOpenGLMulti(OSWindow wnd, vector<CaptureRect> rects, Napi::Env env) {
+	//TODO cache this handle!!!
+	auto handle = Alt1Native::HookProcess(wnd.hwnd);
+	vector<JSRectangle> rawrects(rects.size());
+	for (int i = 0; i < rects.size(); i++) {
+		rawrects[i] = rects[i].rect;
+	}
+	auto pixeldata = Alt1Native::CaptureMultiple(handle, &rawrects[0], rawrects.size());
+	if (!pixeldata) {
+		char errtext[200] = { 0 };
+		int len = Alt1Native::GetDebug(errtext, sizeof(errtext) - 1);
+		throw Napi::Error::New(env, string() + "Failed to capture, native error: " + errtext);
+	}
+	//TODO get rid of copy somehow? (src memory is shared ipc memory so not trivial)
+	size_t offset = 0;
+	for (int i = 0; i < rects.size(); i++) {
+		//TODO use correct pixel format in injectdll so this flip isnt needed
+		//copy and flip in one pass
+		flipBGRAtoRGBA(rects[i].data, pixeldata + offset, rects[i].size);
+		offset += (size_t)rawrects[i].width * rawrects[i].height * 4;
+	}
+}
+
+void OSCaptureMulti(OSWindow wnd, CaptureMode mode, vector<CaptureRect> rects, Napi::Env env) {
+	switch (mode) {
+	case CaptureMode::Desktop: {
+		//TODO double check and document desktop 0 special case
+		auto offset = wnd.GetClientBounds();
+		auto mapped = vector<CaptureRect>(rects);
+		for (auto& capt : mapped) {
+			OSCaptureDesktop(capt.data, capt.size, capt.rect.x + offset.x, capt.rect.y + offset.y, capt.rect.width, capt.rect.height);
+		}
+		break;
+	}
+	case CaptureMode::Window:
+		for (auto const& capt : rects) {
+			OSCaptureWindow(capt.data, capt.size, wnd, capt.rect.x, capt.rect.y, capt.rect.width, capt.rect.height);
+		}
+		break;
+	case CaptureMode::OpenGL: {
+		OSCaptureOpenGLMulti(wnd, rects, env);
+		break;
+	}
+	default:
+		throw Napi::RangeError::New(env, "Capture mode not supported");
+	}
 }
 
 void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD idEventThread, DWORD dwmsEventTime);
@@ -275,7 +309,7 @@ void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function c
 int hookprocCount = 0;
 
 //need this weird function to deal with the possibility of the list being modified from the js callback
-//tracker is a lambda function that returns true if the callback was called
+//return true from cond if the handler matches and should be called
 template<typename F,typename COND>
 void iterateHandlers(COND cond, F tracker) {
 	hookprocCount++;

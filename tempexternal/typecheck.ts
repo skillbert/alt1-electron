@@ -124,17 +124,17 @@ namespace Checks {
 		return r;
 	}
 
-	export function strenum<T extends { [key: string]: string }>(opts: T, d?: keyof T) {
+	export function strenum<T extends string, W extends T = T>(opts: { [keys in T]: string }, d?: W) {
 		if (typeof d == "undefined") {
-			d = Object.keys(opts)[0] as keyof T;
+			d = Object.keys(opts)[0] as W;
 		}
-		var r: Uservar<keyof T> & { opts: T } = {
+		var r: Uservar<T> & { opts: { [keys in T]: string } } = {
 			opts: opts,
 			default() { return d!; },
 			load(v) {
 				if (typeof v != "string") { throw new UservarError("strenum should be of type string"); }
 				if (Object.keys(opts).indexOf(v) == -1) { throw new UservarError("strenum is not part of predefined enum values"); }
-				return v as keyof T
+				return v as T;
 			},
 			store(v) { return v; },
 			type: strenum,

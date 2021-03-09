@@ -113,19 +113,26 @@ OSWindow OSFindMainWindow(unsigned long process_id) {
 void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
 }
 
-void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h) {
-	
-}
-
-void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y, int w, int h) {
-	
-}
-
-void OSCaptureDesktopMulti(vector<CaptureRect> rects) {
+void OSCaptureDesktopMulti(OSWindow wnd, vector<CaptureRect> rects) {
 	
 }
 void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects) {
 	
+}
+
+
+void OSCaptureMulti(OSWindow wnd, CaptureMode mode, vector<CaptureRect> rects, Napi::Env env){
+	switch (mode) {
+	case CaptureMode::Desktop: {
+		OSCaptureDesktopMulti(wnd, rects);
+		break;
+	}
+	case CaptureMode::Window:
+		OSCaptureWindowMulti(wnd, rects);
+		break;
+	default:
+		throw Napi::RangeError::New(env, "Capture mode not supported");
+	}
 }
 
 std::string OSGetProcessName(int pid) {

@@ -1,3 +1,4 @@
+import { CaptureMode } from "./native";
 
 export type FlatImageData = { data: Uint8ClampedArray, width: number, height: number };
 export type SyncResponse<T> = { error: string } | { error: undefined, value: T };
@@ -7,7 +8,8 @@ export type RsClientState = {
 	active: boolean,
 	lastBlurTime: number,
 	ping: number,
-	scaling: number
+	scaling: number,
+	captureMode: CaptureMode
 }
 
 

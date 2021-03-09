@@ -12,7 +12,6 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
 	//TODO need delete destructor to get rid of the mem again?
 	env.SetInstanceData<>(inst);
 
-	exports.Set("captureWindow", Napi::Function::New(env, CaptureWindow));
 	exports.Set("captureWindowMulti", Napi::Function::New(env, CaptureWindowMulti));
 	exports.Set("getProcessMainWindow", Napi::Function::New(env, GetProcessMainWindow));
 	exports.Set("getProcessesByName", Napi::Function::New(env, GetProcessesByName));

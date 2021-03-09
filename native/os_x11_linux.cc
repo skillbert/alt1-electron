@@ -148,12 +148,14 @@ void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
 	// xcb_reparent_window(connection, wnd.hwnd, parent.hwnd, 0, 0);
 }
 
+//TODO obsolete?
 void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h) {
 	ensureConnection();
 	XShmCapture acquirer(connection, rootWindow);
 	acquirer.copy(reinterpret_cast<char*>(target), maxlength, x, y, w, h);
 }
 
+//TODO obsolete?
 void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y, int w, int h) {
 	ensureConnection();
 	xcb_composite_redirect_window(connection, wnd.hwnd, XCB_COMPOSITE_REDIRECT_AUTOMATIC);
@@ -166,14 +168,17 @@ void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y,
 	xcb_free_pixmap(connection, pixId);
 }
 
-void OSCaptureDesktopMulti(vector<CaptureRect> rects) {
+void OSCaptureDesktopMulti(OSWindow wnd, vector<CaptureRect> rects) {
 	ensureConnection();
 	XShmCapture acquirer(connection, rootWindow);
+	//TODO double check and document desktop 0 special case
+	auto offset = wnd.GetClientBounds();
 
 	for (CaptureRect &rect : rects) {
-		acquirer.copy(reinterpret_cast<char*>(rect.data), rect.size, rect.rect.x, rect.rect.y, rect.rect.width, rect.rect.height);
+		acquirer.copy(reinterpret_cast<char*>(rect.data), rect.size, rect.rect.x + offset.x, rect.rect.y + offset.y, rect.rect.width, rect.rect.height);
 	}
 }
+
 void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects) {
 	ensureConnection();
 	xcb_composite_redirect_window(connection, wnd.hwnd, XCB_COMPOSITE_REDIRECT_AUTOMATIC);
@@ -187,6 +192,20 @@ void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects) {
 	}
 
 	xcb_free_pixmap(connection, pixId);
+}
+
+void OSCaptureMulti(OSWindow wnd, CaptureMode mode, vector<CaptureRect> rects, Napi::Env env) {
+	switch (mode) {
+	case CaptureMode::Desktop: {
+		OSCaptureDesktopMulti(wnd, rects);
+		break;
+	}
+	case CaptureMode::Window:
+		OSCaptureWindowMulti(wnd, rects);
+		break;
+	default:
+		throw Napi::RangeError::New(env, "Capture mode not supported");
+	}
 }
 
 std::string OSGetProcessName(int pid) {

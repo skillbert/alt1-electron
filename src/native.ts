@@ -5,10 +5,10 @@ import { boundMethod } from "autobind-decorator";
 import { TypedEmitter } from "./typedemitter";
 import { PinRect } from "./settings";
 
+export type CaptureMode = "desktop" | "window" | "opengl";
 
 export var native: {
-	captureWindow: (wnd: BigInt, x: number, y: number, w: number, h: number) => Uint8ClampedArray,
-	captureWindowMulti: <T extends { [key: string]: Rectangle | undefined | null }>(wnd: BigInt, rect: T) => { [key in keyof T]: Uint8ClampedArray },
+	captureWindowMulti: <T extends { [key: string]: Rectangle | undefined | null }>(wnd: BigInt, mode: CaptureMode, rect: T) => { [key in keyof T]: Uint8ClampedArray },
 	getProcessMainWindow: (pid: number) => BigInt,
 	getProcessesByName: (name: string) => number[],
 	getProcessName: (pid: number) => string,
