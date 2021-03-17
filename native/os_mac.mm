@@ -1,10 +1,20 @@
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <unistd.h>
 #include "os.h"
 #include "libproc.h"
 
+bool isCgWindowId(Window wnd) {
+	return wnd.cg.magicNo == MAGIC_WINID;
+}
+
 void OSWindow::SetBounds(JSRectangle bounds) {
+	if (isCgWindowId(this->hwnd)) {
+		std::cout << "SetBounds called on cgwindowid" << std::endl;
+		return;
+	}
+	
 	assert(bounds.width > 0);
 	assert(bounds.height > 0);
 	
@@ -19,6 +29,11 @@ void OSWindow::SetBounds(JSRectangle bounds) {
 }
 
 JSRectangle OSWindow::GetBounds() {
+	if (isCgWindowId(this->hwnd)) {
+		std::cout << "GetBounds called on cgwindowid" << std::endl;
+		return JSRectangle();
+	}
+
 	NSWindow* window = [this->hwnd.wnd window];
 	NSRect frame = [window frame];
 	int y = [[NSScreen mainScreen] frame].size.height - frame.origin.y - frame.size.height;
@@ -26,15 +41,20 @@ JSRectangle OSWindow::GetBounds() {
 }
 
 JSRectangle OSWindow::GetClientBounds() {
-	return JSRectangle();
+	return this->GetBounds();
 }
 
 int OSWindow::GetPid() {
-	return 0;
+	if (isCgWindowId(this->hwnd)) {
+		return 0;
+	}
+
+	// if it's NSView then it's always our own
+	return getpid();
 }
 
 bool OSWindow::IsValid() {
-	if (this->hwnd.winid == 0) {
+	if (this->hwnd.wnd == NULL) {
 		return false;
 	}
 
@@ -42,11 +62,29 @@ bool OSWindow::IsValid() {
 }
 
 std::string OSWindow::GetTitle() {
-	return "";
+	if (isCgWindowId(this->hwnd)) {
+		std::cout << "GetTitle called on cgwindowid" << std::endl;
+		return "";
+	}
+
+	NSWindow* window = [this->hwnd.wnd window];
+	return std::string([[window title] UTF8String]);
 }
 
 Napi::Value OSWindow::ToJS(Napi::Env env) {
-	return Napi::BigInt::New(env, (uint64_t) this->hwnd.winid);
+	size_t size = sizeof(OSRawWindow) / sizeof(uint64_t);
+	return Napi::BigInt::New(env, 0, size, (uint64_t*) &this->hwnd);
+}
+
+OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
+	auto handle = jsval.As<Napi::BigInt>();
+
+	OSRawWindow buf = DEFAULT_OSRAWWINDOW;
+	int sign;
+	size_t bufSize = sizeof(OSRawWindow) / sizeof(uint64_t);
+	handle.ToWords(&sign, &bufSize, (uint64_t*) &buf);
+
+	return OSWindow(buf);
 }
 
 bool OSWindow::operator==(const OSWindow& other) const {
@@ -55,16 +93,6 @@ bool OSWindow::operator==(const OSWindow& other) const {
 
 bool OSWindow::operator<(const OSWindow& other) const {
 	return memcmp(&this->hwnd, &other.hwnd, sizeof(this->hwnd)) < 0;
-}
-
-OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
-	auto handle = jsval.As<Napi::BigInt>();
-	bool lossless;
-	uint64_t handleint = handle.Uint64Value(&lossless);
-	if (!lossless) {
-		Napi::RangeError::New(jsval.Env(), "Invalid handle").ThrowAsJavaScriptException();
-	}
-	return OSWindow(OSRawWindow{.wnd = (NSView*) handleint});
 }
 
 std::vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid) {
