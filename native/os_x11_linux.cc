@@ -1,17 +1,22 @@
 #include <unistd.h>
 #include <memory>
-#include <iostream>
+#include <functional>
 #include <napi.h>
 #include <proc/readproc.h>
 #include <xcb/composite.h>
 #include "os.h"
 #include "linux/x11.h"
+#include "linux/x11_event.h"
 #include "linux/shm.h"
 
 using namespace priv_os_x11;
 
+void OSInit() {
+	priv_os_x11::connect();
+	priv_os_x11::startThread();
+}
+
 void OSWindow::SetBounds(JSRectangle bounds) {
-	ensureConnection();
 	xcb_configure_window_value_list_t config = {
 		.x = bounds.x,
 		.y = bounds.y,
@@ -24,7 +29,6 @@ void OSWindow::SetBounds(JSRectangle bounds) {
 }
 
 JSRectangle OSWindow::GetBounds() {
-	ensureConnection();
 	xcb_query_tree_cookie_t cookie = xcb_query_tree_unchecked(connection, this->hwnd);
 	std::unique_ptr<xcb_query_tree_reply_t, decltype(&free)> reply { xcb_query_tree_reply(connection, cookie, NULL), &free };
 	if (!reply) {
@@ -40,7 +44,6 @@ JSRectangle OSWindow::GetBounds() {
 }
 
 JSRectangle OSWindow::GetClientBounds() {
-	ensureConnection();
 	xcb_get_geometry_cookie_t cookie = xcb_get_geometry_unchecked(connection, this->hwnd);
 	std::unique_ptr<xcb_get_geometry_reply_t, decltype(&free)> reply { xcb_get_geometry_reply(connection, cookie, NULL), &free };
 	if (!reply) { 
@@ -51,7 +54,6 @@ JSRectangle OSWindow::GetClientBounds() {
 }
 
 int OSWindow::GetPid() {
-	ensureConnection();
 	xcb_get_property_cookie_t cookie = xcb_ewmh_get_wm_pid(&ewmhConnection, this->hwnd);
 	uint32_t pid;
 	if (xcb_ewmh_get_wm_pid_reply(&ewmhConnection, cookie, &pid, NULL) == 0) {
@@ -66,14 +68,12 @@ bool OSWindow::IsValid() {
 		return false;
 	}
 
-	ensureConnection();
 	xcb_get_geometry_cookie_t cookie = xcb_get_geometry_unchecked(connection, this->hwnd);
 	std::unique_ptr<xcb_get_geometry_reply_t, decltype(&free)> reply { xcb_get_geometry_reply(connection, cookie, NULL), &free };
 	return !!reply;
 }
 
 std::string OSWindow::GetTitle() {
-	ensureConnection();
 	xcb_get_property_cookie_t cookie = xcb_get_property_unchecked(connection, 0, this->hwnd, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 0, 100);
 	std::unique_ptr<xcb_get_property_reply_t, decltype(&free)> reply { xcb_get_property_reply(connection, cookie, NULL), &free };
 	if (!reply) {
@@ -129,7 +129,6 @@ std::vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid)
 }
 
 OSWindow OSFindMainWindow(unsigned long process_id) {
-	ensureConnection();
 	std::vector<xcb_window_t> windows = findWindowsWithPid((pid_t) process_id);
 
 	if (windows.size() == 0){
@@ -140,7 +139,6 @@ OSWindow OSFindMainWindow(unsigned long process_id) {
 }
 
 void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
-	ensureConnection();
 	// This does not work:
 	// 1. It show up on screenshot
 	// 2. It break setbounds somehow
@@ -150,14 +148,12 @@ void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
 
 //TODO obsolete?
 void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h) {
-	ensureConnection();
 	XShmCapture acquirer(connection, rootWindow);
 	acquirer.copy(reinterpret_cast<char*>(target), maxlength, x, y, w, h);
 }
 
 //TODO obsolete?
 void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y, int w, int h) {
-	ensureConnection();
 	xcb_composite_redirect_window(connection, wnd.hwnd, XCB_COMPOSITE_REDIRECT_AUTOMATIC);
 	xcb_pixmap_t pixId = xcb_generate_id(connection);
 	xcb_composite_name_window_pixmap(connection, wnd.hwnd, pixId);
@@ -169,7 +165,6 @@ void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y,
 }
 
 void OSCaptureDesktopMulti(OSWindow wnd, vector<CaptureRect> rects) {
-	ensureConnection();
 	XShmCapture acquirer(connection, rootWindow);
 	//TODO double check and document desktop 0 special case
 	auto offset = wnd.GetClientBounds();
@@ -180,7 +175,6 @@ void OSCaptureDesktopMulti(OSWindow wnd, vector<CaptureRect> rects) {
 }
 
 void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects) {
-	ensureConnection();
 	xcb_composite_redirect_window(connection, wnd.hwnd, XCB_COMPOSITE_REDIRECT_AUTOMATIC);
 	xcb_pixmap_t pixId = xcb_generate_id(connection);
 	xcb_composite_name_window_pixmap(connection, wnd.hwnd, pixId);
@@ -229,12 +223,143 @@ OSWindow OSGetActiveWindow() {
 
 	return OSWindow(window);
 }
+
+uint8_t opcode_event(WindowEventType type) {
+	switch (type) {
+	case WindowEventType::Move:
+		return XCB_CONFIGURE_NOTIFY;
+	case WindowEventType::Close:
+		return XCB_DESTROY_NOTIFY;
+	// case WindowEventType::Show:
+	// 	break;
+	case WindowEventType::Click:
+		return XCB_BUTTON_PRESS;
+	default:
+		return 0;
+	}
+}
+
+class Listener : public X11EventListener {
+public:
+	OSWindow wnd;
+	WindowEventType type;
+	Napi::ThreadSafeFunction callback;
+	Napi::FunctionReference fref;
 	
+	Listener(OSWindow wnd, WindowEventType type, Napi::Function cb) : wnd(wnd), type(type) {
+		this->callback = Napi::ThreadSafeFunction::New(cb.Env(), cb, "listener", 0, 2);
+		this->fref = Napi::Persistent(cb);
+		this->fref.SuppressDestruct();
+	};
+
+	Listener(Listener& other) {
+		this->wnd = other.wnd;
+		this->type = other.type;
+		this->callback = other.callback;
+		this->fref = Napi::Persistent(other.fref.Value());
+	};
+	
+	void onEvent(const xcb_generic_event_t* event);
+	
+	bool operator==(const X11EventListener& other) {
+		const Listener& listener = reinterpret_cast<const Listener&>(other);
+		return listener.wnd == this->wnd && listener.type == this->type && listener.fref == this->fref;
+	}
+};
+
+void Listener::onEvent(const xcb_generic_event_t* event) {
+	// XXX: This function is called without checking window
+	try {
+		switch (this->type) {
+			case WindowEventType::Move: 
+				{
+					// (bounds: Rectangle, phase: "start" | "moving" | "end")
+					auto real_event = reinterpret_cast<const xcb_configure_notify_event_t*>(event);
+					if (real_event->window != this->wnd.hwnd) {
+						return;
+					}
+					this->callback.NonBlockingCall([this, real_event](Napi::Env env, Napi::Function jsCallback) {
+						jsCallback({
+							JSRectangle(real_event->x, real_event->y, real_event->width, real_event->height).ToJs(env),
+							Napi::String::New(env, "end")
+						});
+					});
+					break;
+				}
+			case WindowEventType::Close:
+				{
+					// ()
+					auto real_event = reinterpret_cast<const xcb_destroy_notify_event_t*>(event);
+					if (real_event->window != this->wnd.hwnd) {
+						return;
+					}
+					this->callback.NonBlockingCall();
+					break;
+				}
+			case WindowEventType::Show:
+				{
+					// (wnd: BigInt, event: number)
+					// auto real_event = reinterpret_cast<const xcb_configure_notify_event_t*>(event);
+					// if (real_event->window != this->wnd.hwnd) {
+					// 	return;
+					// }
+					this->callback.NonBlockingCall([this, event](Napi::Env env, Napi::Function jsCallback) {
+						jsCallback({
+							this->wnd.ToJS(env),
+							Napi::Number::New(env, event->full_sequence)
+						});
+					});
+					break;
+				}
+			case WindowEventType::Click:
+				{
+					// ()
+					auto real_event = reinterpret_cast<const xcb_button_press_event_t*>(event);
+					if (real_event->event != this->wnd.hwnd) {
+						return;
+					}
+					this->callback.NonBlockingCall();
+					break;
+				}
+		}
+	} catch (...) {}
+}
+
+std::vector<std::reference_wrapper<std::unique_ptr<Listener>>> listeners;
 
 void OSNewWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) {
+	uint8_t opcode = opcode_event(type);
+	if (opcode == 0) {
+		return;
+	}
+	
+	xcb_change_window_attributes_value_list_t values = {};
+	values.event_mask = XCB_EVENT_MASK_STRUCTURE_NOTIFY; // XCB_EVENT_MASK_BUTTON_PRESS
+	xcb_change_window_attributes_aux(connection, wnd.hwnd, XCB_CW_EVENT_MASK, &values);
 
+	std::unique_ptr<Listener> listener = std::make_unique<Listener>(wnd, type, cb);
+	listeners.push_back(std::ref(listener));
+	priv_os_x11::registerEventHandler(opcode, std::move(listener));
 }
 
 void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) {
+	uint8_t opcode = opcode_event(type);
+	if (opcode == 0) {
+		return;
+	}
+	auto persistCb = Napi::Persistent(cb);
 
+	for (auto it = listeners.begin(); it != listeners.end();) {
+		std::unique_ptr<Listener>& ref = it->get();
+		if (ref == NULL) {
+			listeners.erase(it);
+			break;
+		}
+		if (ref->type == type && ref->wnd == wnd && ref->fref == persistCb) {
+			priv_os_x11::unregisterEventHandler(opcode, *ref);
+			listeners.erase(it);
+			break;
+		}
+		it++;
+	}
 }

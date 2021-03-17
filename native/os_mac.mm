@@ -106,6 +106,8 @@ std::vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid)
 	return out;
 }
 
+void OSInit() {}
+
 OSWindow OSFindMainWindow(unsigned long process_id) {
 	return OSWindow(DEFAULT_OSRAWWINDOW);
 }

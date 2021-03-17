@@ -127,6 +127,8 @@ OSWindow OSFindMainWindow(unsigned long process_id)
 	return OSWindow(data.window_handle);
 }
 
+void OSInit() {}
+
 void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
 	//show behind parent, then show parent behind self (no way to show in front in winapi)
 	if (parent.hwnd != 0) {

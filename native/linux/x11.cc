@@ -2,7 +2,6 @@
 #include <iostream>
 #include <vector>
 #include <map>
-#include <mutex>
 #include <shared_mutex>
 #include "x11.h"
 
@@ -13,21 +12,10 @@ namespace priv_os_x11 {
 	xcb_window_t rootWindow;
 	xcb_ewmh_connection_t ewmhConnection;
 
-	std::mutex conn_mtx;
 	std::map<std::string, xcb_atom_t> atoms;
 	std::shared_mutex atoms_mtx;
 
-	void ensureConnection() {
-		if (connection != NULL) {
-			return;
-		}
-
-		std::lock_guard<std::mutex> lock(conn_mtx);
-		// check again with lock
-		if (connection != NULL) {
-			return;
-		}
-
+	void connect() {
 		connection = xcb_connect(NULL, NULL);
 		if (xcb_connection_has_error(connection)) {
 			throw new std::runtime_error("Cannot initiate xcb connection");
@@ -53,7 +41,6 @@ namespace priv_os_x11 {
 		}
 
 		slock.unlock();
-		ensureConnection();
 		
 		std::lock_guard<std::shared_mutex> lock(atoms_mtx);
 		xcb_intern_atom_cookie_t cookie = xcb_intern_atom(connection, true, strlen(name), name);
@@ -68,14 +55,10 @@ namespace priv_os_x11 {
 	}
 
 	std::vector<xcb_window_t> findWindowsWithPid(const pid_t pid) {
-		ensureConnection();
-		
 		return findWindowsWithPid(pid, rootWindow);
 	}
 
 	std::vector<xcb_window_t> findWindowsWithPid(const pid_t pid, const xcb_window_t root) {
-		// XXX: This does not check for connection validity - it assume that you must have connection
-		// to get that window ID anyway
 		std::vector<xcb_window_t> out;
 
 		xcb_get_property_cookie_t pidCookie = xcb_ewmh_get_wm_pid(&ewmhConnection, root);

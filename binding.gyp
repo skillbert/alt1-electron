@@ -55,28 +55,17 @@
 					"sources": [
 						"./native/os_x11_linux.cc",
 						"./native/linux/x11.cc",
+						"./native/linux/x11_event.cc",
 						"./native/linux/shm.cc"
 					],
 					'cflags': [
-						'<!@(<(pkg-config) --cflags xcb)',
-						'<!@(<(pkg-config) --cflags xcb-ewmh)',
-						'<!@(<(pkg-config) --cflags xcb-shm)',
-						'<!@(<(pkg-config) --cflags xcb-composite)',
-						'<!@(<(pkg-config) --cflags libprocps)'
+						'<!@(<(pkg-config) --cflags xcb xcb-ewmh xcb-shm xcb-composite libprocps)'
 					],
 					'ldflags': [
-						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb)',
-						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb-ewmh)',
-						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb-shm)',
-						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb-composite)',
-						'<!@(<(pkg-config) --libs-only-L --libs-only-other libprocps)'
+						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb xcb-ewmh xcb-shm xcb-composite libprocps)'
 					],
 					'libraries': [
-						'<!@(<(pkg-config) --libs-only-l xcb)',
-						'<!@(<(pkg-config) --libs-only-l xcb-ewmh)',
-						'<!@(<(pkg-config) --libs-only-l xcb-shm)',
-						'<!@(<(pkg-config) --libs-only-l xcb-composite)',
-						'<!@(<(pkg-config) --libs-only-l libprocps)'
+						'<!@(<(pkg-config) --libs-only-l xcb xcb-ewmh xcb-shm xcb-composite libprocps)'
 					],
 					"cflags_cc": [ "-std=c++17" ],
 				}],

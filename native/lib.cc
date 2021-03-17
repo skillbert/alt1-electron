@@ -11,6 +11,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
 	auto inst = new PluginInstance();
 	//TODO need delete destructor to get rid of the mem again?
 	env.SetInstanceData<>(inst);
+	OSInit();
 
 	exports.Set("captureWindowMulti", Napi::Function::New(env, CaptureWindowMulti));
 	exports.Set("getProcessMainWindow", Napi::Function::New(env, GetProcessMainWindow));
