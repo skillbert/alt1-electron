@@ -23,7 +23,7 @@ if (process.env.NODE_ENV === "development") {
 }
 
 export const managedWindows: ManagedWindow[] = [];
-export function getManagedWindow(w: webContents) { return managedWindows.find(q => q.window.webContents == w); }
+export function getManagedWindow(w: WebContents) { return managedWindows.find(q => q.window.webContents == w); }
 export function getManagedAppWindow(id: number) { return managedWindows.find(q => q.appFrameId == id); }
 var tray: Tray | null = null;
 var alt1icon = nativeImage.createFromPath(relPath(require("!file-loader!./imgs/alt1icon.png").default));
