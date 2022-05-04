@@ -15,6 +15,8 @@ import type { Alt1EventType } from "@alt1/base";
 import { boundMethod } from "autobind-decorator";
 
 
+require('@electron/remote/main').initialize()
+
 if (process.env.NODE_ENV === "development") {
 	patchImageDataShow();
 	//exposed on global for debugging purposes
@@ -98,7 +100,7 @@ class ManagedWindow {
 		}
 
 		this.window = new BrowserWindow({
-			webPreferences: { nodeIntegration: true, webviewTag: true, enableRemoteModule: true },
+			webPreferences: { nodeIntegration: true, webviewTag: true },
 			frame: false,
 			width: posrect.width,
 			height: posrect.height,
@@ -173,7 +175,7 @@ export function showSettings() {
 		return;
 	}
 	settingsWnd = new BrowserWindow({
-		webPreferences: { nodeIntegration: true, webviewTag: true, enableRemoteModule: true },
+		webPreferences: { nodeIntegration: true, webviewTag: true },
 	});
 	settingsWnd.loadFile(path.resolve(__dirname, "settings/index.html"));
 	settingsWnd.once("closed", e => settingsWnd = null);

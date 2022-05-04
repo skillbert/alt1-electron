@@ -2,7 +2,8 @@
 import * as React from "react";
 import { useState, useLayoutEffect, useRef } from "react";
 import { render } from "react-dom";
-import { ipcRenderer, remote, WebContents, WebviewTag } from "electron";
+import { ipcRenderer, WebContents, WebviewTag } from "electron";
+import  remote from "@electron/remote";
 import classnames from "classnames";
 import type { RectLike } from "@alt1/base";
 
