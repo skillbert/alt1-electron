@@ -36,7 +36,7 @@
 		"json-loader": "^0.5.7",
 		"nan": "^2.14.2",
 		"node-addon-api": "^3.1.0",
-		"node-sass": "^4.14.1",
+		"node-sass": "^6.0.1",
 		"sass-loader": "^10.1.1",
 		"style-loader": "^2.0.0",
 		"ts-loader": "^8.0.14",
@@ -47,7 +47,7 @@
 		"webpack-node-externals": "^2.5.2"
 	},
 	"dependencies": {
-		"electron": "^11.2.1",
+		"electron": "^15.1.0",
 		"node-fetch": "^2.6.1",
 		"react": "^17.0.1",
 		"react-dom": "^17.0.1"
