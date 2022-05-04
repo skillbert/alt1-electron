@@ -5,7 +5,7 @@ import fetch from "node-fetch";
 import { BrowserView, dialog, Menu, MenuItem, Tray, webContents } from "electron/main";
 import { MenuItemConstructorOptions, nativeImage } from "electron/common";
 import { handleSchemeArgs, handleSchemeCommand } from "./schemehandler";
-import { patchImageDataShow, readJsonWithBOM, relPath, rsClientExe, sameDomainResolve, schemestring, weborigin } from "./lib";
+import { patchImageDataShow, readJsonWithBOM, relPath, sameDomainResolve, schemestring, weborigin } from "./lib";
 import { identifyApp } from "./appconfig";
 import { getActiveWindow, native, OSNullWindow, OSWindow, OSWindowPin, reloadAddon } from "./native";
 import { detectInstances, getRsInstanceFromWnd, RsInstance, rsInstances, initRsInstanceTracking } from "./rsinstance";

@@ -5,7 +5,7 @@ import fetch from "node-fetch";
 import { dialog, Menu, MenuItem, Tray } from "electron/main";
 import { MenuItemConstructorOptions, nativeImage } from "electron/common";
 import { handleSchemeArgs, handleSchemeCommand } from "./schemehandler";
-import { delay, readJsonWithBOM, relPath, rsClientExe, sameDomainResolve, schemestring, weborigin } from "./lib";
+import { delay, readJsonWithBOM, relPath, rsClientProcessNames, sameDomainResolve, schemestring, weborigin } from "./lib";
 import { identifyApp } from "./appconfig";
 import { OSWindow, native, OSWindowPin, OSNullWindow, getActiveWindow } from "./native";
 import { OverlayCommand } from "./shared";
@@ -38,7 +38,7 @@ function windowCreated(handle: BigInt) {
 		let processname = native.getProcessName(pid);
 		let title = wnd.getTitle();
 		//TODO there is currently an issue where it will pin the wrong hwnd of the rs process and this is not recoverable
-		if (title.startsWith("RuneScape") && processname == rsClientExe) {
+		if (title.startsWith("RuneScape") && rsClientProcessNames.includes(processname)) {
 			new RsInstance(wnd);
 		}
 	}
@@ -46,7 +46,7 @@ function windowCreated(handle: BigInt) {
 }
 
 export function detectInstances() {
-	let pids = native.getProcessesByName(rsClientExe);
+	let pids = rsClientProcessNames.flatMap(native.getProcessesByName);
 	for (let inst of rsInstances) {
 		if (pids.indexOf(inst.pid) == -1) {
 			inst.close();

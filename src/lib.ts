@@ -12,7 +12,7 @@ declare global {
 export class UserError extends Error { }
 
 //export const rsClientExe = "notepad++.exe";
-export const rsClientExe = (process.platform == "win32" ? "rs2client.exe" : "rs2client");
+export const rsClientProcessNames = (process.platform == "win32" ? ["rs2client.exe"] : ["rs2client.exe", "rs2client"]);
 export const schemestring = "alt1lite";
 export const weborigin = "https://runeapps.org";
 export const configFile = "./config.json";
