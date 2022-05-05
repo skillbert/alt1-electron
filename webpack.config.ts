@@ -17,7 +17,7 @@ function addMain() {
 	config.entry("tests/index", "./tests/index.ts");
 	config.output(path.resolve(__dirname, "dist"));
 	if (!config.opts.production) {
-		config.chain.devtool("" as any);
+		config.chain.devtool("inline-source-map");
 	}
 	return config.toConfig();
 }

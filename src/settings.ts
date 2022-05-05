@@ -57,11 +57,17 @@ export async function loadSettings() {
 		console.log("couldn't load config");
 		settings = checkSettings.default();
 
-		await fetch(`${weborigin}/data/alt1/defaultapps.json`).then(r => readJsonWithBOM(r)).then(async (r: { folder: string, name: string, url: string }[]) => {
-			for (let appbase of r) {
-				await identifyApp(new URL(`${weborigin}${appbase.url}`));
-			}
-		});
+		await fetch(`${weborigin}/data/alt1/defaultapps.json`)
+			.then(r => readJsonWithBOM(r))
+			.then(async (r: { folder: string, name: string, url: string }[]) => {
+				for (let appbase of r) {
+					try {
+						await identifyApp(new URL(`${weborigin}${appbase.url}`));
+					} catch (e) {
+						console.error(e);
+					}
+				}
+			});
 	}
 }
 
