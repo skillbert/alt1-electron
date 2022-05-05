@@ -69,22 +69,14 @@ Napi::Value CaptureWindowMulti(const Napi::CallbackInfo& info) {
 	return ret;
 }
 
-Napi::Value GetProcessMainWindow(const Napi::CallbackInfo& info) {
-	uint32_t pid = info[0].As<Napi::Number>().Uint32Value();
-	return OSFindMainWindow(pid).ToJS(info.Env());
-}
-
-Napi::Value GetProcessesByName(const Napi::CallbackInfo& info) {
-	string name = info[0].As<Napi::String>().Utf8Value();
-	auto pids = OSGetProcessesByName(name, 0);
-	auto ret = Napi::Array::New(info.Env(), pids.size());
-	for (size_t i = 0; i < pids.size(); i++) { ret.Set(i, pids[i]); }
+Napi::Value GetRsHandles(const Napi::CallbackInfo& info) {
+	auto handles = OSGetRsHandles();
+	auto ret = Napi::Array::New(info.Env(), handles.size());
+	for (size_t i = 0; i < handles.size(); i++) { ret.Set(i, handles[i].ToJS(info.Env())); }
 	return ret;
 }
 
 Napi::Value JSGetActiveWindow(const Napi::CallbackInfo& info) { return OSGetActiveWindow().ToJS(info.Env()); }
-Napi::Value GetProcessName(const Napi::CallbackInfo& info) { return Napi::String::New(info.Env(), OSGetProcessName(info[0].As<Napi::Number>().Uint32Value())); }
-Napi::Value GetWindowPid(const Napi::CallbackInfo& info) { return Napi::Number::New(info.Env(), OSWindow::FromJsValue(info[0]).GetPid()); }
 Napi::Value GetWindowBounds(const Napi::CallbackInfo& info) { return OSWindow::FromJsValue(info[0]).GetBounds().ToJs(info.Env()); }
 Napi::Value GetClientBounds(const Napi::CallbackInfo& info) { return OSWindow::FromJsValue(info[0]).GetClientBounds().ToJs(info.Env()); }
 Napi::Value GetWindowTitle(const Napi::CallbackInfo& info) { return Napi::String::New(info.Env(), OSWindow::FromJsValue(info[0]).GetTitle()); }

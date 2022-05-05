@@ -108,23 +108,9 @@ OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
 	return OSWindow(handleint);
 }
 
-std::vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid) {
-	std::vector<uint32_t> out;
-	
-	uid_t uidlist[1] = {getuid()};
-	std::unique_ptr<PROCTAB, decltype(&closeproc)> proctab = { openproc(PROC_FILLSTAT | PROC_UID, uidlist, 1), &closeproc };
-	
-	proc_t data = {};
-	while (readproc(proctab.get(), &data) != NULL) {
-		if (parentpid != 0 && parentpid != (uint32_t) data.ppid) {
-			continue;
-		}
-		if (name.compare(data.cmd) != 0) {
-			continue;
-		}
-		out.push_back(data.tgid);
-	}
-	
+std::vector<OSWindow> OSGetRsHandles() {
+	std::cout << "OSGetRsHwnds called" << std::endl;
+	std::vector<OSWindow> out;
 	return out;
 }
 
@@ -138,6 +124,8 @@ OSWindow OSFindMainWindow(unsigned long process_id) {
 
 	return OSWindow(windows[0]);
 }
+
+
 
 void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
 	ensureConnection();
@@ -206,18 +194,6 @@ void OSCaptureMulti(OSWindow wnd, CaptureMode mode, vector<CaptureRect> rects, N
 	default:
 		throw Napi::RangeError::New(env, "Capture mode not supported");
 	}
-}
-
-std::string OSGetProcessName(int pid) {
-	pid_t pidlist[2] = {pid, 0};
-	std::unique_ptr<PROCTAB, decltype(&closeproc)> proctab = { openproc(PROC_FILLSTAT | PROC_PID, pidlist), &closeproc };
-
-	proc_t data = {};
-	if (readproc(proctab.get(), &data) == NULL) {
-		return std::string();
-	}
-
-	return std::string(data.cmd);
 }
 
 OSWindow OSGetActiveWindow() {

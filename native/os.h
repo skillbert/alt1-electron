@@ -29,7 +29,7 @@ struct OSWindow {
 	OSRawWindow hwnd = DEFAULT_OSRAWWINDOW;
 public:
 	OSWindow() = default;
-	OSWindow(OSRawWindow wnd) :hwnd(wnd) {}
+	OSWindow(OSRawWindow wnd) : hwnd(wnd) {}
 	void SetBounds(JSRectangle bounds);
 	int GetPid();
 	JSRectangle GetBounds();
@@ -44,13 +44,10 @@ public:
 	bool operator<(const OSWindow& other) const;
 };
 
-vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid);
-
 OSWindow OSFindMainWindow(unsigned long process_id);
 void OSSetWindowParent(OSWindow wnd, OSWindow parent);
-
+std::vector<OSWindow> OSGetRsHandles();
 void OSCaptureMulti(OSWindow wnd, CaptureMode mode, vector<CaptureRect> rects, Napi::Env env);
-string OSGetProcessName(int pid);
 OSWindow OSGetActiveWindow();
 
 

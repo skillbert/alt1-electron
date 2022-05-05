@@ -17,41 +17,17 @@ export var rsInstances: RsInstance[] = [];
 
 export function initRsInstanceTracking() {
 	detectInstances();
-	//TODO this event current fires in many situations, one being simply the active window changing
-	OSNullWindow.on("show", windowCreated);
+	// I don't think we need to do any tracking as long as detectInstances() is called appropriately
 };
 
-function windowCreated(handle: BigInt) {
-	if (handle == BigInt(0)) { return; }
-	let wnd = new OSWindow(handle);
-	let pid = native.getWindowPid(wnd.handle);
-	let wndinst = getRsInstanceFromWnd(wnd);
-	let pidinst = rsInstances.find(q => q.pid == pid);
-
-	if (!wndinst && !pidinst) {
-		let processname = native.getProcessName(pid);
-		let title = wnd.getTitle();
-		//TODO there is currently an issue where it will pin the wrong hwnd of the rs process and this is not recoverable
-		if (title.startsWith("RuneScape") && rsClientProcessNames.includes(processname)) {
-			new RsInstance(wnd);
-		}
-	}
-	rsInstances.forEach(i => i.setActive(wndinst == i));
-}
-
 export function detectInstances() {
-	let pids = rsClientProcessNames.flatMap(native.getProcessesByName);
-	for (let inst of rsInstances) {
-		if (pids.indexOf(inst.pid) == -1) {
-			inst.close();
-		}
-	}
-	for (let pid of pids) {
-		let inst = rsInstances.find(q => q.pid == pid);
-		if (!inst) {
-			new RsInstance(new OSWindow(native.getProcessMainWindow(pid)));
-		}
-	}
+	let hwnds = native.getRsHandles();
+
+	// Remove any currently-tracked instances that were not detected this time
+	rsInstances = rsInstances.filter((x) => hwnds.includes(x.window.handle));
+
+	// Add any new ones
+	hwnds.filter((x) => !rsInstances.map((x) => x.window.handle).includes(x)).map((x) => new RsInstance(new OSWindow(x)));
 }
 
 export function getRsInstanceFromWnd(wnd: OSWindow) {
@@ -122,7 +98,6 @@ class ActiveRightclick {
 }
 
 export class RsInstance extends TypedEmitter<RsInstanceEvents>{
-	pid: number;
 	window: OSWindow;
 	overlayWindow: { browser: BrowserWindow, nativewnd: OSWindow, pin: OSWindowPin, stalledOverlay: { frameid: number, cmd: OverlayCommand[] }[] } | null;
 	activeRightclick: ActiveRightclick | null = null;
@@ -131,7 +106,6 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 
 	constructor(rswindow: OSWindow) {
 		super();
-		this.pid = native.getWindowPid(rswindow.handle);
 		this.window = rswindow;
 		this.window.on("close", this.close);
 		this.window.on("click", this.clientClicked);
@@ -145,7 +119,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 		}
 
 		rsInstances.push(this);
-		console.log(`new rs client tracked with pid: ${this.pid}`);
+		console.log(`new rs client tracked with handle: ${this.window.handle}`);
 	}
 
 	@boundMethod
@@ -153,7 +127,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 		rsInstances.splice(rsInstances.indexOf(this), 1);
 		this.window.removeListener("close", this.close);
 		this.emit("close");
-		console.log(`stopped tracking rs client with pid: ${this.pid}`);
+		console.log(`stopped tracking rs client with handle: ${this.window.handle}`);
 	}
 
 	emitAppEvent<T extends keyof Alt1EventType>(permission: AppPermission | "", type: T, event: Alt1EventType[T]) {
