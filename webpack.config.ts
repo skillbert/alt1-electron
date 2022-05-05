@@ -17,7 +17,7 @@ function addMain() {
 	config.entry("tests/index", "./tests/index.ts");
 	config.output(path.resolve(__dirname, "dist"));
 	if (!config.opts.production) {
-		config.chain.devtool("" as any);
+		config.chain.devtool("eval" as any);
 	}
 	return config.toConfig();
 }

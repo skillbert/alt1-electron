@@ -14,7 +14,7 @@ import { AppPermission, Bookmark, loadSettings, saveSettings, settings } from ".
 import type { Alt1EventType } from "@alt1/base";
 import { boundMethod } from "autobind-decorator";
 
-
+// Initialize remote from the main process tree, to enable in sub-windows (apps)
 require('@electron/remote/main').initialize()
 
 if (process.env.NODE_ENV === "development") {
