@@ -4,7 +4,7 @@
 	"description": "Lightweight cross-platform client for Alt1 Toolkit apps",
 	"main": "index.ts",
 	"scripts": {
-		"build": "node -r ts-node/register ./node_modules/webpack/bin/webpack.js --esnext --nougly",
+		"build": "node -r ts-node/register ./node_modules/webpack/bin/webpack.js",
 		"release": "npm run build -- -p",
 		"watch": "npm run build -- --watch",
 		"ui": "electron --inspect=9228 ./dist/alt1lite.bundle.js",
@@ -48,7 +48,7 @@
 	},
 	"dependencies": {
 		"@electron/remote": "^2.0.8",
-		"electron": "^18.2.0",
+		"electron": "18.2.0",
 		"node-fetch": "^2.6.1",
 		"react": "^17.0.1",
 		"react-dom": "^17.0.1"
