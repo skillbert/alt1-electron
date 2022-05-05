@@ -1,12 +1,12 @@
 import * as path from "path";
 import Alt1Chain from "@alt1/webpack";
 
-module.exports = [].concat(
-	addMain() as any
+module.exports = (env: Record<string, string | boolean>) => [].concat(
+	addMain(env) as any
 );
 
-function addMain() {
-	var config = new Alt1Chain(path.resolve(__dirname, "./src/"), { nodejs: true, sourcemaps: true, ugly: false });
+function addMain(env: Record<string, string | boolean>) {
+	var config = new Alt1Chain(path.resolve(__dirname, "./src/"), { nodejs: true, sourcemaps: true, ugly: false }, env);
 
 	config.entry("alt1lite", "./main.ts");
 	config.entry("appframe/index", "./appframe/index.tsx");
