@@ -31,7 +31,7 @@ reloadAddon();
 //(Re)loads the native code, this gives all kinds of mem leaks and other trouble if called more than once, only do so for debugging
 export function reloadAddon() {
 	//TODO fix hardcoded build path
-	let addonpath = path.resolve(__dirname, "../build/Release/");
+	let addonpath = path.resolve(__dirname, "../build/Debug/");
 
 	//Copy the addon file so we can rebuild while alt1lite is already running
 	if (process.env.NODE_ENV === "development") {
