@@ -15,7 +15,7 @@ Napi::Value HookWindow(const Napi::CallbackInfo& info) {
 #ifdef OPENGL_SUPPORTED
 	auto wnd = OSWindow::FromJsValue(info[0]);
 
-	auto handle = Alt1Native::HookProcess(wnd.hwnd);
+	auto handle = Alt1Native::HookProcess(wnd.handle);
 	hookedWindows[wnd] = handle;
 	return Napi::BigInt::New(info.Env(), (uintptr_t)handle);
 #else

@@ -26,10 +26,10 @@ struct CaptureRect {
 
 //TODO parameter type of objectwrap
 struct OSWindow {
-	OSRawWindow hwnd = DEFAULT_OSRAWWINDOW;
+	OSRawWindow handle = DEFAULT_OSRAWWINDOW;
 public:
 	OSWindow() = default;
-	OSWindow(OSRawWindow wnd) : hwnd(wnd) {}
+	OSWindow(OSRawWindow hnd) : handle(hnd) {}
 	void SetBounds(JSRectangle bounds);
 	int GetPid();
 	JSRectangle GetBounds();

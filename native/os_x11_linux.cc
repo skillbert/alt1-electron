@@ -20,12 +20,12 @@ void OSWindow::SetBounds(JSRectangle bounds) {
 		0, 0, 0
 	};
 
-	xcb_configure_window_aux(connection, this->hwnd, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, &config);
+	xcb_configure_window_aux(connection, this->handle, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, &config);
 }
 
 JSRectangle OSWindow::GetBounds() {
 	ensureConnection();
-	xcb_query_tree_cookie_t cookie = xcb_query_tree_unchecked(connection, this->hwnd);
+	xcb_query_tree_cookie_t cookie = xcb_query_tree_unchecked(connection, this->handle);
 	std::unique_ptr<xcb_query_tree_reply_t, decltype(&free)> reply { xcb_query_tree_reply(connection, cookie, NULL), &free };
 	if (!reply) {
 		return JSRectangle();
@@ -41,7 +41,7 @@ JSRectangle OSWindow::GetBounds() {
 
 JSRectangle OSWindow::GetClientBounds() {
 	ensureConnection();
-	xcb_get_geometry_cookie_t cookie = xcb_get_geometry_unchecked(connection, this->hwnd);
+	xcb_get_geometry_cookie_t cookie = xcb_get_geometry_unchecked(connection, this->handle);
 	std::unique_ptr<xcb_get_geometry_reply_t, decltype(&free)> reply { xcb_get_geometry_reply(connection, cookie, NULL), &free };
 	if (!reply) { 
 		return JSRectangle();
@@ -52,7 +52,7 @@ JSRectangle OSWindow::GetClientBounds() {
 
 int OSWindow::GetPid() {
 	ensureConnection();
-	xcb_get_property_cookie_t cookie = xcb_ewmh_get_wm_pid(&ewmhConnection, this->hwnd);
+	xcb_get_property_cookie_t cookie = xcb_ewmh_get_wm_pid(&ewmhConnection, this->handle);
 	uint32_t pid;
 	if (xcb_ewmh_get_wm_pid_reply(&ewmhConnection, cookie, &pid, NULL) == 0) {
 		return 0;
@@ -62,19 +62,19 @@ int OSWindow::GetPid() {
 }
 
 bool OSWindow::IsValid() {
-	if (!hwnd) {
+	if (!this->handle) {
 		return false;
 	}
 
 	ensureConnection();
-	xcb_get_geometry_cookie_t cookie = xcb_get_geometry_unchecked(connection, this->hwnd);
+	xcb_get_geometry_cookie_t cookie = xcb_get_geometry_unchecked(connection, this->handle);
 	std::unique_ptr<xcb_get_geometry_reply_t, decltype(&free)> reply { xcb_get_geometry_reply(connection, cookie, NULL), &free };
 	return !!reply;
 }
 
 std::string OSWindow::GetTitle() {
 	ensureConnection();
-	xcb_get_property_cookie_t cookie = xcb_get_property_unchecked(connection, 0, this->hwnd, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 0, 100);
+	xcb_get_property_cookie_t cookie = xcb_get_property_unchecked(connection, 0, this->handle, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 0, 100);
 	std::unique_ptr<xcb_get_property_reply_t, decltype(&free)> reply { xcb_get_property_reply(connection, cookie, NULL), &free };
 	if (!reply) {
 		return std::string();
@@ -87,15 +87,15 @@ std::string OSWindow::GetTitle() {
 }
 
 Napi::Value OSWindow::ToJS(Napi::Env env) {
-	return Napi::BigInt::New(env, (uint64_t) this->hwnd);
+	return Napi::BigInt::New(env, (uint64_t) this->handle);
 }
 
 bool OSWindow::operator==(const OSWindow& other) const {
-	return this->hwnd == other.hwnd;
+	return this->handle == other.handle;
 }
 
 bool OSWindow::operator<(const OSWindow& other) const {
-	return this->hwnd < other.hwnd;
+	return this->handle < other.handle;
 }
 
 OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
@@ -109,7 +109,7 @@ OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
 }
 
 std::vector<OSWindow> OSGetRsHandles() {
-	std::cout << "OSGetRsHwnds called" << std::endl;
+	std::cout << "OSGetRsHandles called" << std::endl;
 	std::vector<OSWindow> out;
 	return out;
 }
@@ -133,7 +133,7 @@ void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
 	// 1. It show up on screenshot
 	// 2. It break setbounds somehow
 	// 3. Resizing doesn't work as it don't use setbounds
-	// xcb_reparent_window(connection, wnd.hwnd, parent.hwnd, 0, 0);
+	// xcb_reparent_window(connection, wnd.handle, parent.handle, 0, 0);
 }
 
 //TODO obsolete?
@@ -146,9 +146,9 @@ void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h
 //TODO obsolete?
 void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y, int w, int h) {
 	ensureConnection();
-	xcb_composite_redirect_window(connection, wnd.hwnd, XCB_COMPOSITE_REDIRECT_AUTOMATIC);
+	xcb_composite_redirect_window(connection, wnd.handle, XCB_COMPOSITE_REDIRECT_AUTOMATIC);
 	xcb_pixmap_t pixId = xcb_generate_id(connection);
-	xcb_composite_name_window_pixmap(connection, wnd.hwnd, pixId);
+	xcb_composite_name_window_pixmap(connection, wnd.handle, pixId);
 
 	XShmCapture acquirer(connection, pixId);
 	acquirer.copy(reinterpret_cast<char*>(target), maxlength, x, y, w, h);
@@ -169,9 +169,9 @@ void OSCaptureDesktopMulti(OSWindow wnd, vector<CaptureRect> rects) {
 
 void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects) {
 	ensureConnection();
-	xcb_composite_redirect_window(connection, wnd.hwnd, XCB_COMPOSITE_REDIRECT_AUTOMATIC);
+	xcb_composite_redirect_window(connection, wnd.handle, XCB_COMPOSITE_REDIRECT_AUTOMATIC);
 	xcb_pixmap_t pixId = xcb_generate_id(connection);
-	xcb_composite_name_window_pixmap(connection, wnd.hwnd, pixId);
+	xcb_composite_name_window_pixmap(connection, wnd.handle, pixId);
 
 	XShmCapture acquirer(connection, pixId);
 
