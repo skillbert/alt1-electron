@@ -2,16 +2,15 @@
 import * as React from "react";
 import { useState, useLayoutEffect, useRef } from "react";
 import { render } from "react-dom";
-import { ipcRenderer, WebContents, WebviewTag } from "electron";
-import  remote from "@electron/remote";
+import { ipcRenderer, WebContents } from "electron";
+import * as remote from "@electron/remote";
 import classnames from "classnames";
 import type { RectLike } from "@alt1/base";
 
 import "./style.scss";
 import "./index.html";
-
 (window as any).remote = remote;
-var appview: WebviewTag | null = null;
+var appview: Electron.WebviewTag | null = null;
 var appcontents: WebContents | null = null;
 var mainmodule = remote.getGlobal("Alt1lite") as typeof import("../main");
 //TODO backup if this fails
@@ -33,7 +32,6 @@ function AppFrame(p: {}) {
 		let view = document.createElement("webview");
 		view.className = "appframe";
 		view.preload = "./alt1api.bundle.js";
-		view.enableremotemodule = false;
 		view.allowpopups = true;
 		view.nodeintegration = false;
 		view.nodeintegrationinsubframes = false;
