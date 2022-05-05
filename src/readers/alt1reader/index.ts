@@ -3,10 +3,10 @@ import * as OCR from "@alt1/ocr";
 import RightClickReader from "../rightclick";
 
 const chatfonts: { name: TextResult["font"], font: OCR.FontDefinition }[] = [
-	{ name: "11pt", font: require("@alt1/ocr/dist/fonts/chat_8px.js") },
-	{ name: "13pt", font: require("@alt1/ocr/dist/fonts/chat_10px.js") },
-	{ name: "15pt", font: require("@alt1/ocr/dist/fonts/chat_11px.js") },
-	{ name: "17pt", font: require("@alt1/ocr/dist/fonts/chat_13px.js") }
+	{ name: "11pt", font: require("@alt1/ocr/fonts/chat_8px.js") },
+	{ name: "13pt", font: require("@alt1/ocr/fonts/chat_10px.js") },
+	{ name: "15pt", font: require("@alt1/ocr/fonts/chat_11px.js") },
+	{ name: "17pt", font: require("@alt1/ocr/fonts/chat_13px.js") }
 ];
 
 type TextResult = {
