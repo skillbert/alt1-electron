@@ -1,17 +1,15 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, WebContents } from "electron";
 import * as electron from "electron";
 import * as path from "path";
-import fetch from "node-fetch";
-import { BrowserView, dialog, Menu, MenuItem, Tray, webContents } from "electron/main";
+import { Menu, Tray } from "electron/main";
 import { MenuItemConstructorOptions, nativeImage } from "electron/common";
-import { handleSchemeArgs, handleSchemeCommand } from "./schemehandler";
-import { patchImageDataShow, readJsonWithBOM, relPath, sameDomainResolve, schemestring, weborigin } from "./lib";
+import { handleSchemeArgs } from "./schemehandler";
+import { patchImageDataShow, relPath, sameDomainResolve, schemestring } from "./lib";
 import { identifyApp } from "./appconfig";
-import { getActiveWindow, native, OSNullWindow, OSWindow, OSWindowPin, reloadAddon } from "./native";
+import { getActiveWindow, native, OSWindow, OSWindowPin, reloadAddon } from "./native";
 import { detectInstances, getRsInstanceFromWnd, RsInstance, rsInstances, initRsInstanceTracking } from "./rsinstance";
 import { OverlayCommand, Rectangle, RsClientState } from "./shared";
 import { AppPermission, Bookmark, loadSettings, saveSettings, settings } from "./settings";
-import type { Alt1EventType } from "@alt1/base";
 import { boundMethod } from "autobind-decorator";
 
 // Initialize remote from the main process tree, to enable in sub-windows (apps)

@@ -1,15 +1,9 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, WebContents } from "electron";
+import { app, BrowserWindow } from "electron";
 import * as electron from "electron";
 import * as path from "path";
-import fetch from "node-fetch";
-import { dialog, Menu, MenuItem, Tray } from "electron/main";
-import { MenuItemConstructorOptions, nativeImage } from "electron/common";
-import { handleSchemeArgs, handleSchemeCommand } from "./schemehandler";
-import { delay, readJsonWithBOM, relPath, rsClientProcessNames, sameDomainResolve, schemestring, weborigin } from "./lib";
-import { identifyApp } from "./appconfig";
-import { OSWindow, native, OSWindowPin, OSNullWindow, getActiveWindow } from "./native";
+import { delay, rsClientProcessNames } from "./lib";
+import { OSWindow, native, OSWindowPin, OSNullWindow } from "./native";
 import { OverlayCommand } from "./shared";
-import { EventEmitter } from "events";
 import { TypedEmitter } from "./typedemitter";
 import { boundMethod } from "autobind-decorator";
 import { AppPermission, settings } from "./settings";

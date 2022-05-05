@@ -1,8 +1,7 @@
 //this import also imports global namespace alt1 passively...
 import type * as alt1types from "@alt1/base";
 import { ipcRenderer } from "electron";
-import { contextBridge } from "electron/renderer";
-import { FlatImageData, SyncResponse, Rectangle, OverlayCommand, OverlayPrimitive, RsClientState } from "../shared";
+import { FlatImageData, SyncResponse, OverlayCommand, RsClientState } from "../shared";
 
 let warningsTriggered: string[] = [];
 function warn(key: string, message: string) {
