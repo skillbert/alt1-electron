@@ -141,7 +141,8 @@ var alt1api: Partial<typeof alt1> = {
 		return alt1.overLayTextEx(text, color, size, x, y, time, "", false, true);
 	},
 	overLayImage(x, y, imgstr, imgwidth, time) {
-		throw new Error("not implemented");
+		warn("overlayimg", "alt1.overLayImage is not implemented");
+		return false;
 	},
 	overLaySetGroup(groupid: string) { queueOverlayCommand({ command: "setgroup", groupid }); },
 	overLaySetGroupZIndex(groupid: string, zindex: number) { queueOverlayCommand({ command: "setgroupzindex", groupid, zindex }); },
