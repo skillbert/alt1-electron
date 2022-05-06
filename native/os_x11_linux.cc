@@ -50,17 +50,6 @@ JSRectangle OSWindow::GetClientBounds() {
 	return JSRectangle(reply->x, reply->y, reply->width, reply->height);
 }
 
-int OSWindow::GetPid() {
-	ensureConnection();
-	xcb_get_property_cookie_t cookie = xcb_ewmh_get_wm_pid(&ewmhConnection, this->handle);
-	uint32_t pid;
-	if (xcb_ewmh_get_wm_pid_reply(&ewmhConnection, cookie, &pid, NULL) == 0) {
-		return 0;
-	}
-
-	return int(pid);
-}
-
 bool OSWindow::IsValid() {
 	if (!this->handle) {
 		return false;
