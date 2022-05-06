@@ -108,9 +108,53 @@ OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
 	return OSWindow(handleint);
 }
 
+void GetRsHandlesRecursively(const xcb_window_t window, std::vector<OSWindow>* out, unsigned int* deepest, unsigned int depth = 0) {
+	const uint32_t long_length = 4096;
+	xcb_query_tree_cookie_t cookie = xcb_query_tree(connection, window);
+	xcb_query_tree_reply_t* reply = xcb_query_tree_reply(connection, cookie, NULL);
+	if (reply == NULL) {
+		return;
+	}
+
+	xcb_window_t* children = xcb_query_tree_children(reply);
+
+	for (auto i = 0; i < xcb_query_tree_children_length(reply); i++) {
+		// First, check WM_CLASS for either "RuneScape" or "steam_app_1343400"
+		xcb_window_t child = children[i];
+		xcb_get_property_cookie_t cookieProp = xcb_get_property(connection, 0, child, XCB_ATOM_WM_CLASS, XCB_ATOM_STRING, 0, long_length);
+		xcb_get_property_reply_t* replyProp = xcb_get_property_reply(connection, cookieProp, NULL);
+		if (replyProp != NULL) {
+			auto len = xcb_get_property_value_length(replyProp);
+			// if len == long_length then that means we didn't read the whole property, so discard.
+			if (len > 0 && (uint32_t)len < long_length) {
+				char buffer[long_length] = { 0 };
+				memcpy(buffer, xcb_get_property_value(replyProp), len);
+				// first is instance name, then class name - both null terminated. we want class name.
+				const char* classname = buffer + strlen(buffer) + 1;
+				if (strcmp(classname, "RuneScape") == 0 || strcmp(classname, "steam_app_1343400") == 0) {
+					// Now, only take this if it's one of the deepest instances found so far
+					if (depth > *deepest) {
+						out->clear();
+						out->push_back(child);
+						*deepest = depth;
+					} else if (depth == *deepest) {
+						out->push_back(child);
+					}
+				}
+			}
+		}
+		free(replyProp);
+		GetRsHandlesRecursively(child, out, deepest, depth + 1);
+	}
+
+	free(reply);
+}
+
 std::vector<OSWindow> OSGetRsHandles() {
-	std::cout << "OSGetRsHandles called" << std::endl;
+	ensureConnection();
 	std::vector<OSWindow> out;
+	unsigned int deepest = 0;
+	GetRsHandlesRecursively(rootWindow, &out, &deepest);
 	return out;
 }
 
