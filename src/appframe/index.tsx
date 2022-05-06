@@ -36,8 +36,8 @@ function AppFrame(p: {}) {
 		view.nodeintegration = false;
 		view.nodeintegrationinsubframes = false;
 		view.src = thiswindow.appConfig.appUrl;
-		//view.webpreferences = "nativeWindowOpen,sandbox,contextIsolation=true";
-		view.webpreferences = "nativeWindowOpen,sandbox,contextIsolation=false";
+		//view.webpreferences = "sandbox,contextIsolation=true";
+		view.webpreferences = "sandbox,contextIsolation=false";
 		el.current.appendChild(view);
 		view.addEventListener("dom-ready", e => {
 			//TODO is there a better way to get a ref to the frame?

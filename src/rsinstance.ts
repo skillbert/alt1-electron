@@ -239,7 +239,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 			console.log("opening overlay");
 			let bounds = this.window.getClientBounds();
 			let browser = new BrowserWindow({
-				webPreferences: { nodeIntegration: true },
+				webPreferences: { nodeIntegration: true, contextIsolation: false },
 				frame: false,
 				transparent: true,
 				x: bounds.x,

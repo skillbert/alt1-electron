@@ -11,9 +11,7 @@ import { detectInstances, getRsInstanceFromWnd, RsInstance, rsInstances, initRsI
 import { OverlayCommand, Rectangle, RsClientState } from "./shared";
 import { AppPermission, Bookmark, loadSettings, saveSettings, settings } from "./settings";
 import { boundMethod } from "autobind-decorator";
-
-// Initialize remote from the main process tree, to enable in sub-windows (apps)
-require('@electron/remote/main').initialize()
+import * as remoteMain from "@electron/remote/main";
 
 if (process.env.NODE_ENV === "development") {
 	patchImageDataShow();
@@ -42,6 +40,7 @@ if (!app.requestSingleInstanceLock()) { app.exit(); }
 app.setAsDefaultProtocolClient(schemestring, undefined, [__non_webpack_require__.main!.filename]);
 handleSchemeArgs(process.argv);
 loadSettings();
+remoteMain.initialize();
 
 app.on("before-quit", e => {
 	rsInstances.forEach(c => c.close());
@@ -98,12 +97,13 @@ class ManagedWindow {
 		}
 
 		this.window = new BrowserWindow({
-			webPreferences: { nodeIntegration: true, webviewTag: true },
+			webPreferences: { nodeIntegration: true, webviewTag: true, contextIsolation: false },
 			frame: false,
 			width: posrect.width,
 			height: posrect.height,
 			transparent: true
 		});
+		remoteMain.enable(this.window.webContents);
 
 		this.nativeWindow = new OSWindow(this.window.getNativeWindowHandle());
 		this.rsClient = rsclient;
@@ -170,10 +170,11 @@ export function showSettings() {
 		return;
 	}
 	settingsWnd = new BrowserWindow({
-		webPreferences: { nodeIntegration: true, webviewTag: true },
+		webPreferences: { nodeIntegration: true, webviewTag: true, contextIsolation: false },
 	});
 	settingsWnd.loadFile(path.resolve(__dirname, "settings/index.html"));
 	settingsWnd.once("closed", e => settingsWnd = null);
+	remoteMain.enable(settingsWnd.webContents);
 }
 
 //TODO add permission
@@ -195,7 +196,7 @@ class TooltipWindow {
 	loaded = false;
 	constructor() {
 		let wnd = new BrowserWindow({
-			webPreferences: { nodeIntegration: true },
+			webPreferences: { nodeIntegration: true, contextIsolation: false },
 			frame: false,
 			transparent: true,
 			show: false,
