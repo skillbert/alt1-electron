@@ -105,24 +105,17 @@ std::vector<OSWindow> OSGetRsHandles() {
 	PROCESSENTRY32 process = {};
 	process.dwSize = sizeof(process);
 
-	bool first = true;
-	vector<uint32_t> res;
-	while (first ? Process32First(snapshot, &process) : Process32Next(snapshot, &process)) {
-		first = false;
-		if (std::string(process.szExeFile) == name && (parentpid == 0 || parentpid == process.th32ParentProcessID)) {
-			char buffer[MAX_PATH] = { 0 };
-			DWORD len = MAX_PATH;
-			HANDLE hProc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, process.th32ProcessID);
-			QueryFullProcessImageNameA((HMODULE)hProc, 0, buffer, &len);
-			CloseHandle(hProc);
-			string exename = string(buffer);
-			auto i = exename.find_last_of('\\');
-			if (i != string::npos) { exename = exename.substr(i + 1); }
-
-			if strcmp(exename, "rs2client.exe") {
-				out.push_back(process.th32ProcessID);
+	//Walk through all processes
+	if (Process32First(snapshot, &process)) {
+		do {
+			if (std::string(process.szExeFile) == "rs2client.exe") {
+				WinFindMainWindow_data data;
+				data.process_id = process.th32ProcessID;
+				data.window_handle = 0;
+				EnumWindows(WinFindMainWindow_callback, (LPARAM)&data);
+				out.push_back(OSWindow(data.window_handle));
 			}
-		}
+		} while (Process32Next(snapshot, &process));
 	}
 	CloseHandle(snapshot);
 	return out;
