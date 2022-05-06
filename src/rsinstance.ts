@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from "electron";
 import * as electron from "electron";
 import * as path from "path";
-import { delay, rsClientProcessNames } from "./lib";
+import { delay } from "./lib";
 import { OSWindow, native, OSWindowPin, OSNullWindow } from "./native";
 import { OverlayCommand } from "./shared";
 import { TypedEmitter } from "./typedemitter";
