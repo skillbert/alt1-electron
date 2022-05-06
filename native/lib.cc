@@ -13,10 +13,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
 	env.SetInstanceData<>(inst);
 
 	exports.Set("captureWindowMulti", Napi::Function::New(env, CaptureWindowMulti));
-	exports.Set("getProcessMainWindow", Napi::Function::New(env, GetProcessMainWindow));
-	exports.Set("getProcessesByName", Napi::Function::New(env, GetProcessesByName));
-	exports.Set("getProcessName", Napi::Function::New(env, GetProcessName));
-	exports.Set("getWindowPid", Napi::Function::New(env, GetWindowPid));
+	exports.Set("getRsHandles", Napi::Function::New(env, GetRsHandles));
 	exports.Set("getWindowBounds", Napi::Function::New(env, GetWindowBounds));
 	exports.Set("getClientBounds", Napi::Function::New(env, GetClientBounds));
 	exports.Set("getWindowTitle", Napi::Function::New(env, GetWindowTitle));

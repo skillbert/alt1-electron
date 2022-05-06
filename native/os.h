@@ -26,12 +26,11 @@ struct CaptureRect {
 
 //TODO parameter type of objectwrap
 struct OSWindow {
-	OSRawWindow hwnd = DEFAULT_OSRAWWINDOW;
+	OSRawWindow handle = DEFAULT_OSRAWWINDOW;
 public:
 	OSWindow() = default;
-	OSWindow(OSRawWindow wnd) :hwnd(wnd) {}
+	OSWindow(OSRawWindow hnd) : handle(hnd) {}
 	void SetBounds(JSRectangle bounds);
-	int GetPid();
 	JSRectangle GetBounds();
 	JSRectangle GetClientBounds();
 	bool IsValid();
@@ -44,13 +43,10 @@ public:
 	bool operator<(const OSWindow& other) const;
 };
 
-vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid);
-
 OSWindow OSFindMainWindow(unsigned long process_id);
 void OSSetWindowParent(OSWindow wnd, OSWindow parent);
-
+std::vector<OSWindow> OSGetRsHandles();
 void OSCaptureMulti(OSWindow wnd, CaptureMode mode, vector<CaptureRect> rects, Napi::Env env);
-string OSGetProcessName(int pid);
 OSWindow OSGetActiveWindow();
 
 

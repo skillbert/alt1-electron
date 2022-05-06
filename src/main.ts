@@ -1,17 +1,15 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, WebContents } from "electron";
 import * as electron from "electron";
 import * as path from "path";
-import fetch from "node-fetch";
-import { BrowserView, dialog, Menu, MenuItem, Tray, webContents } from "electron/main";
+import { Menu, Tray } from "electron/main";
 import { MenuItemConstructorOptions, nativeImage } from "electron/common";
-import { handleSchemeArgs, handleSchemeCommand } from "./schemehandler";
-import { patchImageDataShow, readJsonWithBOM, relPath, sameDomainResolve, schemestring, weborigin } from "./lib";
+import { handleSchemeArgs } from "./schemehandler";
+import { patchImageDataShow, relPath, sameDomainResolve, schemestring } from "./lib";
 import { identifyApp } from "./appconfig";
-import { getActiveWindow, native, OSNullWindow, OSWindow, OSWindowPin, reloadAddon } from "./native";
+import { getActiveWindow, native, OSWindow, OSWindowPin, reloadAddon } from "./native";
 import { detectInstances, getRsInstanceFromWnd, RsInstance, rsInstances, initRsInstanceTracking } from "./rsinstance";
 import { OverlayCommand, Rectangle, RsClientState } from "./shared";
 import { AppPermission, Bookmark, loadSettings, saveSettings, settings } from "./settings";
-import type { Alt1EventType } from "@alt1/base";
 import { boundMethod } from "autobind-decorator";
 
 // Initialize remote from the main process tree, to enable in sub-windows (apps)
@@ -135,37 +133,34 @@ class ManagedWindow {
 function drawTray() {
 	tray = new Tray(alt1icon);
 	tray.setToolTip("Alt1 Lite");
-	tray.on("click", e => {
-		let menu: MenuItemConstructorOptions[] = [];
-		for (let app of settings.bookmarks) {
-			menu.push({
-				label: app.appName,
-				icon: app.iconCached ? nativeImage.createFromDataURL(app.iconCached).resize({ height: 20, width: 20 }) : undefined,
-				click: openApp.bind(null, app, undefined),
-			});
-		}
-		if (process.env.NODE_ENV === "development") {
-			menu.push({ type: "separator" });
-			menu.push({
-				label: "Restart", click: e => {
-					//relaunch uses the dir at time of call, there is no better way to give it the original dir
-					process.chdir(originalCwd);
-					app.relaunch();
-					process.chdir(__dirname);
-					app.quit();
-				}
-			});
-			menu.push({ label: "Repin RS", click: e => { rsInstances.forEach(e => e.close()); detectInstances(); } });
-			menu.push({ label: "Reload native addon", click: e => { reloadAddon(); } });
-			menu.push({ label: "Hook dev tools", type: "checkbox", checked: alwaysOpenDevtools, click: e => alwaysOpenDevtools = !alwaysOpenDevtools });
-		}
+	let menu: MenuItemConstructorOptions[] = [];
+	for (let app of settings.bookmarks) {
+		menu.push({
+			label: app.appName,
+			icon: app.iconCached ? nativeImage.createFromDataURL(app.iconCached).resize({ height: 20, width: 20 }) : undefined,
+			click: openApp.bind(null, app, undefined),
+		});
+	}
+	if (process.env.NODE_ENV === "development") {
 		menu.push({ type: "separator" });
-		menu.push({ label: "Settings", click: showSettings });
-		menu.push({ label: "Exit", click: e => app.quit() });
-		let menuinst = Menu.buildFromTemplate(menu);
-		tray!.setContextMenu(menuinst);
-		tray!.popUpContextMenu();
-	});
+		menu.push({
+			label: "Restart", click: e => {
+				//relaunch uses the dir at time of call, there is no better way to give it the original dir
+				process.chdir(originalCwd);
+				app.relaunch();
+				process.chdir(__dirname);
+				app.quit();
+			}
+		});
+		menu.push({ label: "Repin RS", click: e => { rsInstances.forEach(e => e.close()); detectInstances(); } });
+		menu.push({ label: "Reload native addon", click: e => { reloadAddon(); } });
+		menu.push({ label: "Hook dev tools", type: "checkbox", checked: alwaysOpenDevtools, click: e => alwaysOpenDevtools = !alwaysOpenDevtools });
+	}
+	menu.push({ type: "separator" });
+	menu.push({ label: "Settings", click: showSettings });
+	menu.push({ label: "Exit", click: e => app.quit() });
+	let menuinst = Menu.buildFromTemplate(menu);
+	tray.setContextMenu(menuinst);
 }
 
 let settingsWnd: BrowserWindow | null = null;

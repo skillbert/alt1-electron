@@ -12,39 +12,34 @@ OSWindow OSGetActiveWindow() {
 }
 
 void OSWindow::SetBounds(JSRectangle bounds) {
-	SetWindowPos(hwnd, NULL, bounds.x, bounds.y, bounds.width, bounds.height, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+	SetWindowPos(this->handle, NULL, bounds.x, bounds.y, bounds.width, bounds.height, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
 }
 
 Napi::Value OSWindow::ToJS(Napi::Env env) {
-	return Napi::BigInt::New(env, (uint64_t)hwnd);
+	return Napi::BigInt::New(env, (uint64_t)this->handle);
 }
 
-int OSWindow::GetPid() {
-	uint32_t pid = 0;
-	GetWindowThreadProcessId(this->hwnd, (DWORD*)&pid);
-	return pid;
-}
 JSRectangle OSWindow::GetBounds() {
 	RECT rect;
-	if (!GetWindowRect(hwnd, &rect)) { return JSRectangle(0, 0, 0, 0); }
+	if (!GetWindowRect(this->handle, &rect)) { return JSRectangle(0, 0, 0, 0); }
 	return JSRectangle(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
 }
 JSRectangle OSWindow::GetClientBounds() {
 	RECT rect;
-	GetClientRect(hwnd, &rect);
+	GetClientRect(this->handle, &rect);
 	//this rect to point cast is actually specified in winapi docs and has special behavior
-	MapWindowPoints(hwnd, HWND_DESKTOP, (LPPOINT)&rect, 2);
+	MapWindowPoints(this->handle, HWND_DESKTOP, (LPPOINT)&rect, 2);
 	return JSRectangle(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
 }
 bool OSWindow::IsValid() {
-	if (!hwnd) { return false; }
-	return IsWindow(hwnd);
+	if (!this->handle) { return false; }
+	return IsWindow(this->handle);
 }
 string OSWindow::GetTitle() {
-	int len = GetWindowTextLengthA(hwnd);
+	int len = GetWindowTextLengthA(this->handle);
 	if (len == 0) { return string(""); }
 	vector<char> buf(len + 1);
-	GetWindowTextA(hwnd, &buf[0], len + 1);
+	GetWindowTextA(this->handle, &buf[0], len + 1);
 	return string(&buf[0]);
 }
 OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
@@ -56,44 +51,11 @@ OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
 }
 
 bool OSWindow::operator==(const OSWindow& other) const {
-	return this->hwnd == other.hwnd;
+	return this->handle == other.handle;
 }
 
 bool OSWindow::operator<(const OSWindow& other) const {
-	return this->hwnd < other.hwnd;
-}
-
-vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid)
-{
-	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-	PROCESSENTRY32 process = {};
-	process.dwSize = sizeof(process);
-
-	//Walk through all processes
-	bool first = true;
-	vector<uint32_t> res;
-	while (first ? Process32First(snapshot, &process) : Process32Next(snapshot, &process))
-	{
-		first = false;
-		if (std::string(process.szExeFile) == name && (parentpid == 0 || parentpid == process.th32ParentProcessID))
-		{
-			res.push_back(process.th32ProcessID);
-		}
-	}
-	CloseHandle(snapshot);
-	return res;
-}
-
-string OSGetProcessName(int pid) {
-	char buffer[MAX_PATH] = { 0 };
-	DWORD len = MAX_PATH;
-	HANDLE hProc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
-	QueryFullProcessImageNameA((HMODULE)hProc, 0, buffer, &len);
-	CloseHandle(hProc);
-	string exename = string(buffer);
-	auto i = exename.find_last_of('\\');
-	if (i != string::npos) { exename = exename.substr(i + 1); }
-	return exename;
+	return this->handle < other.handle;
 }
 
 struct WinFindMainWindow_data
@@ -129,16 +91,38 @@ OSWindow OSFindMainWindow(unsigned long process_id)
 
 void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
 	//show behind parent, then show parent behind self (no way to show in front in winapi)
-	if (parent.hwnd != 0) {
-		SetWindowPos(wnd.hwnd, parent.hwnd, 0, 0, 0, 0, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
-		SetWindowPos(parent.hwnd, wnd.hwnd, 0, 0, 0, 0, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
+	if (parent.handle != 0) {
+		SetWindowPos(wnd.handle, parent.handle, 0, 0, 0, 0, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
+		SetWindowPos(parent.handle, wnd.handle, 0, 0, 0, 0, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
 	}
 	//TODO there was a reason to do this instead of using the nicely named SetParent window, find out why
-	SetWindowLongPtr(wnd.hwnd, GWLP_HWNDPARENT, (uint64_t)parent.hwnd);
+	SetWindowLongPtr(wnd.handle, GWLP_HWNDPARENT, (uint64_t)parent.handle);
+}
+
+std::vector<OSWindow> OSGetRsHandles() {
+	std::vector<OSWindow> out;
+	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+	PROCESSENTRY32 process = {};
+	process.dwSize = sizeof(process);
+
+	//Walk through all processes
+	if (Process32First(snapshot, &process)) {
+		do {
+			if (std::string(process.szExeFile) == "rs2client.exe") {
+				WinFindMainWindow_data data;
+				data.process_id = process.th32ProcessID;
+				data.window_handle = 0;
+				EnumWindows(WinFindMainWindow_callback, (LPARAM)&data);
+				out.push_back(OSWindow(data.window_handle));
+			}
+		} while (Process32Next(snapshot, &process));
+	}
+	CloseHandle(snapshot);
+	return out;
 }
 
 void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y, int w, int h) {
-	HDC hdc = GetDC(wnd.hwnd);
+	HDC hdc = GetDC(wnd.handle);
 	HDC hDest = CreateCompatibleDC(hdc);
 	HBITMAP hbDesktop = CreateCompatibleBitmap(hdc, w, h);
 	//TODO hbDekstop can be null (in alt1 code at least)
@@ -177,7 +161,7 @@ void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h
 
 void OSCaptureOpenGLMulti(OSWindow wnd, vector<CaptureRect> rects, Napi::Env env) {
 	//TODO cache this handle!!!
-	auto handle = Alt1Native::HookProcess(wnd.hwnd);
+	auto handle = Alt1Native::HookProcess(wnd.handle);
 	vector<JSRectangle> rawrects(rects.size());
 	for (int i = 0; i < rects.size(); i++) {
 		rawrects[i] = rects[i].rect;
@@ -335,7 +319,7 @@ void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject
 	case EVENT_OBJECT_STATECHANGE:
 	case EVENT_OBJECT_DESTROY:
 		iterateHandlers(
-			[&](const TrackedEvent& h) {return hwnd == h.wnd.hwnd && h.type == WindowEventType::Close; },
+			[&](const TrackedEvent& h) {return hwnd == h.wnd.handle && h.type == WindowEventType::Close; },
 			[&](const TrackedEvent& h) {
 				auto env = h.callback.Env();
 				Napi::HandleScope scope(env);
@@ -347,7 +331,7 @@ void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject
 	case EVENT_SYSTEM_CAPTURESTART: {
 		auto windowhwnd = GetAncestor(hwnd, GA_ROOT);
 		iterateHandlers(
-			[&](const TrackedEvent& h) {return windowhwnd == h.wnd.hwnd && h.type == WindowEventType::Click; },
+			[&](const TrackedEvent& h) {return windowhwnd == h.wnd.handle && h.type == WindowEventType::Click; },
 			[&](const TrackedEvent& h) {
 				auto env = h.callback.Env();
 				Napi::HandleScope scope(env);
@@ -361,7 +345,7 @@ void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject
 		JSRectangle bounds = wnd.GetBounds();
 		const char* phase = (event == EVENT_SYSTEM_MOVESIZEEND ? "end" : event == EVENT_SYSTEM_MOVESIZESTART ? "start" : "moving");
 		iterateHandlers(
-			[&](const TrackedEvent& h) {return hwnd == h.wnd.hwnd && h.type == WindowEventType::Move; },
+			[&](const TrackedEvent& h) {return hwnd == h.wnd.handle && h.type == WindowEventType::Move; },
 			[&](const TrackedEvent& h) {
 				auto env = h.callback.Env();
 				Napi::HandleScope scope(env);
@@ -373,7 +357,7 @@ void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject
 	case EVENT_SYSTEM_FOREGROUND:
 	case EVENT_OBJECT_SHOW: {
 		iterateHandlers(
-			[&](const TrackedEvent& h) {return (h.wnd.hwnd == 0 || hwnd == h.wnd.hwnd) && h.type == WindowEventType::Show; },
+			[&](const TrackedEvent& h) {return (h.wnd.handle == 0 || hwnd == h.wnd.handle) && h.type == WindowEventType::Show; },
 			[&](const TrackedEvent& h) {
 				auto env = h.callback.Env();
 				Napi::HandleScope scope(env);
@@ -391,29 +375,29 @@ TrackedEvent::TrackedEvent(OSWindow wnd, WindowEventType type, Napi::Function cb
 	this->callback.SuppressDestruct();
 	DWORD pid;
 	//TODO error handling
-	GetWindowThreadProcessId(wnd.hwnd, &pid);
+	GetWindowThreadProcessId(wnd.handle, &pid);
 	switch (type) {
 	case WindowEventType::Click:
 		this->hooks = {
-			WindowsEventHook::GetHook(wnd.hwnd,WindowsEventGroup::System)
+			WindowsEventHook::GetHook(wnd.handle,WindowsEventGroup::System)
 		};
 		break;
 	case WindowEventType::Move:
 		this->hooks = {
-			WindowsEventHook::GetHook(wnd.hwnd,WindowsEventGroup::Object),
-			WindowsEventHook::GetHook(wnd.hwnd,WindowsEventGroup::System)
+			WindowsEventHook::GetHook(wnd.handle,WindowsEventGroup::Object),
+			WindowsEventHook::GetHook(wnd.handle,WindowsEventGroup::System)
 		};
 		break;
 	case WindowEventType::Close:
 		this->hooks = {
-			WindowsEventHook::GetHook(wnd.hwnd,WindowsEventGroup::Object)
+			WindowsEventHook::GetHook(wnd.handle,WindowsEventGroup::Object)
 		};
 		break;
 	case WindowEventType::Show:
 		//TODO don't need both here, currently spamming basically all event under all windows (hwnd=0)
 		this->hooks = {
-			WindowsEventHook::GetHook(wnd.hwnd,WindowsEventGroup::Object),
-			WindowsEventHook::GetHook(wnd.hwnd,WindowsEventGroup::System),
+			WindowsEventHook::GetHook(wnd.handle,WindowsEventGroup::Object),
+			WindowsEventHook::GetHook(wnd.handle,WindowsEventGroup::System),
 		};
 		break;
 	default:

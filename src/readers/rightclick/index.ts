@@ -1,4 +1,4 @@
-import { ImageData, ImgRef, PointLike, Rect, RectLike } from "@alt1/base";
+import { ImageData, ImgRef, Rect, RectLike } from "@alt1/base";
 import { ImageDetect } from "@alt1/base";
 import * as OCR from "@alt1/ocr";
 

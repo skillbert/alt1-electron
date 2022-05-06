@@ -1,4 +1,4 @@
-import { ImgRef, ImgRefData, Rect } from "@alt1/base";
+import { ImgRefData, Rect } from "@alt1/base";
 import * as OCR from "@alt1/ocr";
 import RightClickReader from "../rightclick";
 

@@ -9,12 +9,8 @@ export type CaptureMode = "desktop" | "window" | "opengl";
 
 export var native: {
 	captureWindowMulti: <T extends { [key: string]: Rectangle | undefined | null }>(wnd: BigInt, mode: CaptureMode, rect: T) => { [key in keyof T]: Uint8ClampedArray },
-	getProcessMainWindow: (pid: number) => BigInt,
-	getProcessesByName: (name: string) => number[],
-	getProcessName: (pid: number) => string,
+	getRsHandles: () => BigInt[],
 	getActiveWindow: () => BigInt,
-
-	getWindowPid: (wnd: BigInt) => number,
 	getWindowBounds: (wnd: BigInt) => Rectangle,
 	getClientBounds: (wnd: BigInt) => Rectangle,
 	getWindowTitle: (wnd: BigInt) => string,
