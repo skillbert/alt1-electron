@@ -14,10 +14,4 @@ namespace priv_os_x11 {
 	void ensureConnection();
 
 	xcb_atom_t getAtom(const char* name);
-
-	/**
-	 * Find main X11 window from given pid
-	 */
-	std::vector<xcb_window_t> findWindowsWithPid(const pid_t pid);
-	std::vector<xcb_window_t> findWindowsWithPid(const pid_t pid, const xcb_window_t root);
 }

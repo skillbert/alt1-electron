@@ -147,18 +147,6 @@ std::vector<OSWindow> OSGetRsHandles() {
 	return out;
 }
 
-OSWindow OSFindMainWindow(unsigned long process_id) {
-	ensureConnection();
-	std::vector<xcb_window_t> windows = findWindowsWithPid((pid_t) process_id);
-
-	if (windows.size() == 0){
-		return OSWindow(0);
-	}
-
-	return OSWindow(windows[0]);
-}
-
-
 
 void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
 	ensureConnection();
@@ -166,27 +154,7 @@ void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
 	// 1. It show up on screenshot
 	// 2. It break setbounds somehow
 	// 3. Resizing doesn't work as it don't use setbounds
-	// xcb_reparent_window(connection, wnd.handle, parent.handle, 0, 0);
-}
-
-//TODO obsolete?
-void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h) {
-	ensureConnection();
-	XShmCapture acquirer(connection, rootWindow);
-	acquirer.copy(reinterpret_cast<char*>(target), maxlength, x, y, w, h);
-}
-
-//TODO obsolete?
-void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y, int w, int h) {
-	ensureConnection();
-	xcb_composite_redirect_window(connection, wnd.handle, XCB_COMPOSITE_REDIRECT_AUTOMATIC);
-	xcb_pixmap_t pixId = xcb_generate_id(connection);
-	xcb_composite_name_window_pixmap(connection, wnd.handle, pixId);
-
-	XShmCapture acquirer(connection, pixId);
-	acquirer.copy(reinterpret_cast<char*>(target), maxlength, x, y, w, h);
-
-	xcb_free_pixmap(connection, pixId);
+	//xcb_reparent_window(connection, wnd.handle, parent.handle, 0, 0);
 }
 
 void OSCaptureDesktopMulti(OSWindow wnd, vector<CaptureRect> rects) {
@@ -217,15 +185,15 @@ void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects) {
 
 void OSCaptureMulti(OSWindow wnd, CaptureMode mode, vector<CaptureRect> rects, Napi::Env env) {
 	switch (mode) {
-	case CaptureMode::Desktop: {
-		OSCaptureDesktopMulti(wnd, rects);
-		break;
-	}
-	case CaptureMode::Window:
-		OSCaptureWindowMulti(wnd, rects);
-		break;
-	default:
-		throw Napi::RangeError::New(env, "Capture mode not supported");
+		case CaptureMode::Desktop: {
+			OSCaptureDesktopMulti(wnd, rects);
+			break;
+		}
+		case CaptureMode::Window:
+			OSCaptureWindowMulti(wnd, rects);
+			break;
+		default:
+			throw Napi::RangeError::New(env, "Capture mode not supported");
 	}
 }
 

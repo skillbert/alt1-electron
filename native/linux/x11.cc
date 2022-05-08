@@ -66,42 +66,4 @@ namespace priv_os_x11 {
 
 		return reply->atom;
 	}
-
-	std::vector<xcb_window_t> findWindowsWithPid(const pid_t pid) {
-		ensureConnection();
-		
-		return findWindowsWithPid(pid, rootWindow);
-	}
-
-	std::vector<xcb_window_t> findWindowsWithPid(const pid_t pid, const xcb_window_t root) {
-		// XXX: This does not check for connection validity - it assume that you must have connection
-		// to get that window ID anyway
-		std::vector<xcb_window_t> out;
-
-		xcb_get_property_cookie_t pidCookie = xcb_ewmh_get_wm_pid(&ewmhConnection, root);
-		xcb_query_tree_cookie_t queryCookie = xcb_query_tree_unchecked(connection, root);
-		std::unique_ptr<xcb_query_tree_reply_t, decltype(&free)> queryReply { xcb_query_tree_reply(connection, queryCookie, NULL), &free };
-		if (!queryReply) {
-			return out;
-		}
-		uint32_t rootPid;
-		if (xcb_ewmh_get_wm_pid_reply(&ewmhConnection, pidCookie, &rootPid, NULL) != 0) {
-			if (pid == (pid_t) rootPid) {
-				out.push_back(root);
-				// don't recurse as everything gonna be owned by this
-				return out;
-			}
-		}
-
-		// recurse and merge
-		xcb_window_t* children = xcb_query_tree_children(queryReply.get());
-		size_t len = xcb_query_tree_children_length(queryReply.get());
-		for (size_t i = 0; i < len; i++) {
-			std::vector<xcb_window_t> result = findWindowsWithPid(pid, children[i]);
-			out.reserve(out.size() + result.size());
-			out.insert(out.end(), result.begin(), result.end());
-		}
-
-		return out;
-	}
 }
