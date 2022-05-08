@@ -12,42 +12,68 @@ using namespace priv_os_x11;
 
 void OSWindow::SetBounds(JSRectangle bounds) {
 	ensureConnection();
-	xcb_configure_window_value_list_t config = {
-		.x = bounds.x,
-		.y = bounds.y,
-		.width = (uint32_t) bounds.width,
-		.height = (uint32_t) bounds.height,
-		0, 0, 0
-	};
-
-	xcb_configure_window_aux(connection, this->handle, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, &config);
+	if (bounds.width > 0 && bounds.height > 0) {
+		int32_t config[] = {
+			bounds.x,
+			bounds.y,
+			bounds.width,
+			bounds.height,
+		};
+		xcb_configure_window(connection, this->handle, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, &config);
+	} else {
+		int32_t config[] = {
+			bounds.x,
+			bounds.y,
+		};
+		xcb_configure_window(connection, this->handle, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, &config);
+	}
+	xcb_flush(connection);
 }
 
 JSRectangle OSWindow::GetBounds() {
 	ensureConnection();
-	xcb_query_tree_cookie_t cookie = xcb_query_tree_unchecked(connection, this->handle);
-	std::unique_ptr<xcb_query_tree_reply_t, decltype(&free)> reply { xcb_query_tree_reply(connection, cookie, NULL), &free };
-	if (!reply) {
+	xcb_get_geometry_cookie_t cookie = xcb_get_geometry(connection, this->handle);
+	xcb_get_geometry_reply_t* reply = xcb_get_geometry_reply(connection, cookie, NULL);
+	if (!reply) { 
 		return JSRectangle();
 	}
-
-	if (reply->parent == reply->root) {
-		// not reparented to wm - probably has no border
-		return this->GetClientBounds();
-	}
-
-	return OSWindow(reply->parent).GetClientBounds();
+	return JSRectangle(0, 0, reply->width, reply->height);
 }
 
 JSRectangle OSWindow::GetClientBounds() {
 	ensureConnection();
-	xcb_get_geometry_cookie_t cookie = xcb_get_geometry_unchecked(connection, this->handle);
-	std::unique_ptr<xcb_get_geometry_reply_t, decltype(&free)> reply { xcb_get_geometry_reply(connection, cookie, NULL), &free };
-	if (!reply) { 
+	xcb_get_geometry_cookie_t cookie = xcb_get_geometry(connection, this->handle);
+	xcb_get_geometry_reply_t* reply = xcb_get_geometry_reply(connection, cookie, NULL);
+	if (!reply) {
 		return JSRectangle();
 	}
 
-	return JSRectangle(reply->x, reply->y, reply->width, reply->height);
+	auto x = reply->x;
+	auto y = reply->y;
+	auto width = reply->width;
+	auto height = reply->height;
+	auto window = this->handle;
+	while (true) {
+		xcb_query_tree_cookie_t cookieTree = xcb_query_tree(connection, window);
+		xcb_query_tree_reply_t* replyTree = xcb_query_tree_reply(connection, cookieTree, NULL);
+		if (replyTree == NULL || replyTree->parent == reply->root) {
+			break;
+		}
+		window = replyTree->parent;
+		free(reply);
+		free(replyTree);
+
+		cookie = xcb_get_geometry(connection, window);
+		reply = xcb_get_geometry_reply(connection, cookie, NULL);
+		if (reply == NULL) {
+			break;
+		}
+
+		x += reply->x;
+		y += reply->y;
+	}
+	free(reply);
+	return JSRectangle(x, y, width, height);
 }
 
 bool OSWindow::IsValid() {
