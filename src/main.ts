@@ -101,7 +101,11 @@ class ManagedWindow {
 			frame: false,
 			width: posrect.width,
 			height: posrect.height,
-			transparent: true
+			transparent: true,
+			fullscreenable: false,
+			skipTaskbar: true,
+			minimizable: false,
+			maximizable: false,
 		});
 		remoteMain.enable(this.window.webContents);
 
