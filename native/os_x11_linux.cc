@@ -34,10 +34,13 @@ JSRectangle OSWindow::GetBounds() {
 	ensureConnection();
 	xcb_get_geometry_cookie_t cookie = xcb_get_geometry(connection, this->handle);
 	xcb_get_geometry_reply_t* reply = xcb_get_geometry_reply(connection, cookie, NULL);
-	if (!reply) { 
+	if (!reply) {
 		return JSRectangle();
 	}
-	return JSRectangle(0, 0, reply->width, reply->height);
+	auto w = reply->width;
+	auto h = reply->height;
+	free(reply);
+	return JSRectangle(0, 0, w, h);
 }
 
 JSRectangle OSWindow::GetClientBounds() {
