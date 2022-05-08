@@ -203,12 +203,20 @@ void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects) {
 	xcb_pixmap_t pixId = xcb_generate_id(connection);
 	xcb_composite_name_window_pixmap(connection, wnd.handle, pixId);
 
+	xcb_get_geometry_cookie_t cookie = xcb_get_geometry(connection, pixId);
+	xcb_get_geometry_reply_t* reply = xcb_get_geometry_reply(connection, cookie, NULL);
+	if (!reply) {
+		xcb_free_pixmap(connection, pixId);
+		return;
+	}
+
 	XShmCapture acquirer(connection, pixId);
 
 	for (CaptureRect &rect : rects) {
 		acquirer.copy(reinterpret_cast<char*>(rect.data), rect.size, rect.rect.x, rect.rect.y, rect.rect.width, rect.rect.height);
 	}
 
+	free(reply);
 	xcb_free_pixmap(connection, pixId);
 }
 
