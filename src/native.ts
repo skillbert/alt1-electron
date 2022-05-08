@@ -161,7 +161,7 @@ export class OSWindowPin extends TypedEmitter<OSWindowPinEvents>{
 			this.window.setBounds(x, y, this.wndwidth, this.wndheight);
 		}
 		if (this.dockmode == "cover") {
-			let bounds = this.parent.getClientBounds();
+			let bounds = this.parent.getBounds();
 			this.window.setBounds(bounds.x, bounds.y, bounds.width, bounds.height);
 		}
 	}
