@@ -104,8 +104,10 @@ class ManagedWindow {
 			transparent: true,
 			fullscreenable: false,
 			skipTaskbar: true,
+			resizable: process.platform != "linux",
 			minimizable: false,
 			maximizable: false,
+			show: false,
 		});
 		remoteMain.enable(this.window.webContents);
 
@@ -129,7 +131,10 @@ class ManagedWindow {
 			this.windowPin.unpin();
 			fixTooltip();
 		});
-
+		
+		// NOTE: it's very very VERY important that the window must be created with `show: false` and that window.show()
+		// must be called AFTER creating the OSWindowPin. This allows us to manipulate the window before the WM mangles it.
+		this.window.on('ready-to-show', () => { this.window.show(); });
 		managedWindows.push(this);
 	}
 }

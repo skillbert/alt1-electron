@@ -23,7 +23,7 @@ webview {
 	right: 0px;
 	display: grid;
 	grid-template-columns: 8px auto 8px;
-	grid-template-rows: 14px auto 8px;
+	grid-template-rows: 8px auto 8px;
 	pointer-events: all;
 }
 
@@ -56,10 +56,41 @@ webview {
 	}
 }
 
+.dragbutton {
+	float: right;
+	background: black;
+	cursor: move;
+	border: 1px solid red;
+	box-sizing: border-box;
+	width: 30px;
+	height: 12px;
+}
+
 .border {
+	-webkit-app-region: no-drag;
 	background: black;
 	border: 1px solid red;
-	user-select: none;
-	-webkit-user-select: none;
-	-webkit-app-region: drag;
+	//user-select: none;
+	//-webkit-user-select: none;
+	//-webkit-app-region: drag;
+	&-left,
+	&-right {
+		cursor: ew-resize;
+	}
+	&-top,
+	&-bot {
+		cursor: ns-resize;
+	}
+	&-topleft {
+		cursor: nwse-resize;
+	}
+	&-topright {
+		cursor: nesw-resize;
+	}
+	&-botleft {
+		cursor: nesw-resize;
+	}
+	&-botright {
+		cursor: nwse-resize;
+	}
 }

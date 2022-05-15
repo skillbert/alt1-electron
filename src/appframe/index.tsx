@@ -101,6 +101,7 @@ function AppFrame(p: {}) {
 				<div className="button" onClick={e => close()} />
 				<div className="button" onClick={e => setMinimized(!minimized)} />
 				<div className="button" onClick={toggleDevTools} onContextMenu={e => e.preventDefault()} />
+				<div className="dragbutton" onMouseDown={startDrag({ x: 1, y: 1, w: 0, h: 0 })} />
 			</div>
 		</div>
 	);
@@ -120,7 +121,40 @@ function toggleDevTools(e: React.MouseEvent) {
 }
 
 function BorderEl(p: { ver: "top" | "bot" | "", hor: "left" | "right" | "" }) {
-	return <div className={classnames("border", "border-" + p.ver + p.hor)}></div>
+	return <div className={classnames("border", "border-" + p.ver + p.hor)} onMouseDown={borderDrag(p.ver, p.hor)}></div>
+}
+
+function borderDrag(ver: "top" | "bot" | "", hor: "left" | "right" | "") {
+	let factors = {
+		x: (hor == "left" ? 1 : 0),
+		y: (ver == "top" ? 1 : 0),
+		w: (hor == "right" ? 1 : hor == "left" ? -1 : 0),
+		h: (ver == "bot" ? 1 : ver == "top" ? -1 : 0)
+	};
+	return startDrag(factors);
+}
+
+function startDrag(factors: { x: number, y: number, w: number, h: number }) {
+	return function startDrag(starte: React.MouseEvent) {
+		let initial = thiswindow.nativeWindow.getBounds();
+		starte.preventDefault();
+		starte.stopPropagation();
+		appview!.style.pointerEvents = "none";
+		let startpos = remote.screen.getCursorScreenPoint();
+		let moved = () => {
+			let pos = remote.screen.getCursorScreenPoint();
+			let dx = pos.x - startpos.x;
+			let dy = pos.y - startpos.y;
+			thiswindow.nativeWindow.setBounds(initial.x + dx * factors.x, initial.y + dy * factors.y, initial.width + dx * factors.w, initial.height + dy * factors.h);
+			thiswindow.windowPin.updateDocking();
+		};
+		let cleanup = () => {
+			window.removeEventListener("mousemove", moved);
+			appview!.style.pointerEvents = "";
+		}
+		window.addEventListener("mousemove", moved);
+		window.addEventListener("mouseup", cleanup, { once: true });
+	}
 }
 
 function clickThroughEffect(minimized: boolean, rc: RectLike, rootref: React.MutableRefObject<any>) {

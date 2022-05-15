@@ -4,43 +4,58 @@
 #include <napi.h>
 #include <proc/readproc.h>
 #include <xcb/composite.h>
+#include <thread>
 #include "os.h"
 #include "linux/x11.h"
 #include "linux/shm.h"
 
 using namespace priv_os_x11;
 
+void WindowThread(xcb_window_t);
+
 void OSWindow::SetBounds(JSRectangle bounds) {
 	ensureConnection();
-	if (bounds.width > 0 && bounds.height > 0) {
-		int32_t config[] = {
-			bounds.x,
-			bounds.y,
-			bounds.width,
-			bounds.height,
-		};
-		xcb_configure_window(connection, this->handle, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, &config);
-	} else {
-		int32_t config[] = {
-			bounds.x,
-			bounds.y,
-		};
-		xcb_configure_window(connection, this->handle, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, &config);
+	xcb_query_tree_cookie_t cookie = xcb_query_tree(connection, this->handle);
+	xcb_query_tree_reply_t* reply = xcb_query_tree_reply(connection, cookie, NULL);
+	if (reply) {
+		if (bounds.width > 0 && bounds.height > 0) {
+			int32_t config[] = {
+				bounds.x,
+				bounds.y,
+				bounds.width,
+				bounds.height,
+			};
+			xcb_configure_window(connection, reply->parent, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, &config);
+			int32_t childConfig[] = { 0, 0, bounds.width, bounds.height };
+			xcb_configure_window(connection, this->handle, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, &childConfig);
+		} else {
+			int32_t config[] = {
+				bounds.x,
+				bounds.y,
+			};
+			xcb_configure_window(connection, reply->parent, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, &config);
+		}
+		xcb_flush(connection);
+		free(reply);
 	}
-	xcb_flush(connection);
 }
 
 JSRectangle OSWindow::GetBounds() {
 	ensureConnection();
-	xcb_get_geometry_cookie_t cookie = xcb_get_geometry(connection, this->handle);
-	xcb_get_geometry_reply_t* reply = xcb_get_geometry_reply(connection, cookie, NULL);
+	xcb_query_tree_cookie_t cookie = xcb_query_tree(connection, this->handle);
+	xcb_query_tree_reply_t* reply = xcb_query_tree_reply(connection, cookie, NULL);
 	if (!reply) {
 		return JSRectangle();
 	}
-	auto w = reply->width;
-	auto h = reply->height;
+	xcb_get_geometry_cookie_t cookie2 = xcb_get_geometry(connection, reply->parent);
 	free(reply);
-	return JSRectangle(0, 0, w, h);
+	xcb_get_geometry_reply_t* reply2 = xcb_get_geometry_reply(connection, cookie2, NULL);
+	if (!reply2) {
+		return JSRectangle();
+	}
+	auto result = JSRectangle(reply2->x, reply2->y, reply2->width, reply2->height);
+	free(reply2);
+	return result;
 }
 
 JSRectangle OSWindow::GetClientBounds() {
@@ -176,14 +191,35 @@ std::vector<OSWindow> OSGetRsHandles() {
 	return out;
 }
 
-
-void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
+void OSSetWindowParent(OSWindow window, OSWindow parent) {
 	ensureConnection();
-	// This does not work:
-	// 1. It show up on screenshot
-	// 2. It break setbounds somehow
-	// 3. Resizing doesn't work as it don't use setbounds
-	//xcb_reparent_window(connection, wnd.handle, parent.handle, 0, 0);
+	
+	// Query the tree of the game window
+	xcb_query_tree_cookie_t cookieTree = xcb_query_tree(connection, parent.handle);
+	xcb_query_tree_reply_t* tree = xcb_query_tree_reply(connection, cookieTree, NULL);
+	xcb_get_geometry_cookie_t cookieGeometry = xcb_get_geometry(connection, window.handle);
+	xcb_get_geometry_reply_t* geometry = xcb_get_geometry_reply(connection, cookieGeometry, NULL);
+
+	if (tree && tree->parent != tree->root) {
+		const uint32_t values[] = { 1, 33554431 };
+		xcb_window_t id = xcb_generate_id(connection);
+		// Create a new window, parented to the game's parent, with the game view's geometry and OverrideRedirect
+		xcb_create_window(connection, XCB_COPY_FROM_PARENT, id, tree->parent, 0, 0, geometry->width, geometry->height,
+							0, XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_OVERRIDE_REDIRECT | XCB_CW_EVENT_MASK, &values);
+
+		// Map our new frame
+		xcb_map_window(connection, id);
+
+		// Set OverrideRedirect on the electron window, and request all its events
+		xcb_change_window_attributes(connection, window.handle, XCB_CW_OVERRIDE_REDIRECT | XCB_CW_EVENT_MASK, &values);
+
+		// Parent the electron window to our frame
+		xcb_reparent_window(connection, window.handle, id, 0, 0);
+
+		new std::thread(WindowThread, id);
+	}
+
+	free(tree);
 }
 
 void OSCaptureDesktopMulti(OSWindow wnd, vector<CaptureRect> rects) {
@@ -251,4 +287,12 @@ void OSNewWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) 
 
 void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) {
 
+}
+
+void WindowThread(xcb_window_t window) {
+	xcb_generic_event_t* event;
+	while (true) {
+		event = xcb_wait_for_event(connection);
+		std::cout << "Event Type: " << (int)event->response_type << std::endl;
+	}
 }
