@@ -1,9 +1,16 @@
 #pragma once
+#include <thread>
 #include <vector>
 #include <xcb/xcb.h>
 #include <xcb/xcb_ewmh.h>
 
 namespace priv_os_x11 {
+	struct TrackedWindow {
+		xcb_window_t window;
+		xcb_window_t frame;
+		TrackedWindow(xcb_window_t window, xcb_window_t frame) : window(window), frame(frame) {}
+	};
+
 	extern xcb_connection_t* connection;
 	extern xcb_window_t rootWindow;
 	extern xcb_ewmh_connection_t ewmhConnection;

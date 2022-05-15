@@ -4,6 +4,7 @@
 #include <napi.h>
 #include <proc/readproc.h>
 #include <xcb/composite.h>
+#include <atomic>
 #include <thread>
 #include "os.h"
 #include "linux/x11.h"
@@ -11,13 +12,22 @@
 
 using namespace priv_os_x11;
 
+std::vector<TrackedWindow> trackedWindows;
+std::thread windowThread;
+std::atomic<bool> windowThreadExists(false);
+std::atomic<bool> windowThreadShouldRun(false);
+
 void WindowThread(xcb_window_t);
+
+xcb_window_t* GetFrame(xcb_window_t win) {
+	auto result = std::find_if(trackedWindows.begin(), trackedWindows.end(), [&win](TrackedWindow w){return w.window == win;});
+	return result == trackedWindows.end() ? nullptr : &(result->frame);
+}
 
 void OSWindow::SetBounds(JSRectangle bounds) {
 	ensureConnection();
-	xcb_query_tree_cookie_t cookie = xcb_query_tree(connection, this->handle);
-	xcb_query_tree_reply_t* reply = xcb_query_tree_reply(connection, cookie, NULL);
-	if (reply) {
+	auto frame = GetFrame(this->handle);
+	if (frame) {
 		if (bounds.width > 0 && bounds.height > 0) {
 			int32_t config[] = {
 				bounds.x,
@@ -25,7 +35,7 @@ void OSWindow::SetBounds(JSRectangle bounds) {
 				bounds.width,
 				bounds.height,
 			};
-			xcb_configure_window(connection, reply->parent, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, &config);
+			xcb_configure_window(connection, *frame, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, &config);
 			int32_t childConfig[] = { 0, 0, bounds.width, bounds.height };
 			xcb_configure_window(connection, this->handle, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, &childConfig);
 		} else {
@@ -33,10 +43,9 @@ void OSWindow::SetBounds(JSRectangle bounds) {
 				bounds.x,
 				bounds.y,
 			};
-			xcb_configure_window(connection, reply->parent, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, &config);
+			xcb_configure_window(connection, *frame, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, &config);
 		}
 		xcb_flush(connection);
-		free(reply);
 	}
 }
 
@@ -194,32 +203,70 @@ std::vector<OSWindow> OSGetRsHandles() {
 void OSSetWindowParent(OSWindow window, OSWindow parent) {
 	ensureConnection();
 	
-	// Query the tree of the game window
-	xcb_query_tree_cookie_t cookieTree = xcb_query_tree(connection, parent.handle);
-	xcb_query_tree_reply_t* tree = xcb_query_tree_reply(connection, cookieTree, NULL);
-	xcb_get_geometry_cookie_t cookieGeometry = xcb_get_geometry(connection, window.handle);
-	xcb_get_geometry_reply_t* geometry = xcb_get_geometry_reply(connection, cookieGeometry, NULL);
+	// If the parent handle is 0, we're supposed to detach, not attach
+	if (parent.handle != 0) {
+		// Query the tree of the game window
+		xcb_query_tree_cookie_t cookieTree = xcb_query_tree(connection, parent.handle);
+		xcb_query_tree_reply_t* tree = xcb_query_tree_reply(connection, cookieTree, NULL);
+		xcb_get_geometry_cookie_t cookieGeometry = xcb_get_geometry(connection, window.handle);
+		xcb_get_geometry_reply_t* geometry = xcb_get_geometry_reply(connection, cookieGeometry, NULL);
 
-	if (tree && tree->parent != tree->root) {
-		const uint32_t values[] = { 1, 33554431 };
-		xcb_window_t id = xcb_generate_id(connection);
-		// Create a new window, parented to the game's parent, with the game view's geometry and OverrideRedirect
-		xcb_create_window(connection, XCB_COPY_FROM_PARENT, id, tree->parent, 0, 0, geometry->width, geometry->height,
-							0, XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_OVERRIDE_REDIRECT | XCB_CW_EVENT_MASK, &values);
+		if (tree && tree->parent != tree->root) {
+			const uint32_t values[] = { 1, 33554431 };
 
-		// Map our new frame
-		xcb_map_window(connection, id);
+			// Generate an ID and track it
+			xcb_window_t id = xcb_generate_id(connection);
+			trackedWindows.push_back(TrackedWindow(window.handle, id));
 
-		// Set OverrideRedirect on the electron window, and request all its events
-		xcb_change_window_attributes(connection, window.handle, XCB_CW_OVERRIDE_REDIRECT | XCB_CW_EVENT_MASK, &values);
+			// Create a new window, parented to the game's parent, with the game view's geometry and OverrideRedirect
+			xcb_create_window(connection, XCB_COPY_FROM_PARENT, id, tree->parent, 0, 0, geometry->width, geometry->height,
+								0, XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_OVERRIDE_REDIRECT | XCB_CW_EVENT_MASK, &values);
 
-		// Parent the electron window to our frame
-		xcb_reparent_window(connection, window.handle, id, 0, 0);
+			// Map our new frame
+			xcb_map_window(connection, id);
 
-		new std::thread(WindowThread, id);
+			// Set OverrideRedirect on the electron window, and request all its events
+			xcb_change_window_attributes(connection, window.handle, XCB_CW_OVERRIDE_REDIRECT | XCB_CW_EVENT_MASK, &values);
+
+			// Parent the electron window to our frame
+			xcb_reparent_window(connection, window.handle, id, 0, 0);
+
+			std::cout << "native: created frame " << id << " for electron window " << window.handle << std::endl;
+
+			// Start an event-handling thread if there isn't one already running
+			if (!windowThreadExists.load()) {
+				std::cout << "native: starting window thread" << std::endl;
+				windowThreadShouldRun = true;
+				windowThreadExists = true;
+				windowThread = std::thread(WindowThread, id);
+			}
+
+			xcb_flush(connection);
+		}
+
+		free(tree);
+		free(geometry);
+	} else {
+		auto frame = GetFrame(window.handle);
+		if (frame) {
+			xcb_reparent_window(connection, window.handle, rootWindow, 0, 0);
+			std::cout << "native: destroying frame " << *frame << std::endl;
+			if (trackedWindows.size() == 1) {
+				windowThreadShouldRun = false;
+				xcb_destroy_window(connection, *frame);
+				xcb_flush(connection);
+				windowThread.join();
+				trackedWindows.clear();
+			} else {
+				xcb_destroy_window(connection, *frame);
+				xcb_flush(connection);
+				trackedWindows.erase(
+					std::remove_if(trackedWindows.begin(), trackedWindows.end(), [&window](TrackedWindow w){return w.window == window.handle;}),
+					trackedWindows.end()
+				);
+			}
+		}
 	}
-
-	free(tree);
 }
 
 void OSCaptureDesktopMulti(OSWindow wnd, vector<CaptureRect> rects) {
@@ -291,8 +338,16 @@ void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function c
 
 void WindowThread(xcb_window_t window) {
 	xcb_generic_event_t* event;
-	while (true) {
+	while (windowThreadShouldRun.load()) {
 		event = xcb_wait_for_event(connection);
-		std::cout << "Event Type: " << (int)event->response_type << std::endl;
+		if (event) {
+			auto type = event->response_type & ~0x80;
+			switch (type) {
+				//default:
+				//	std::cout << "native: got event type " << type << std::endl;
+			}
+		}
 	}
+	windowThreadExists = false;
+	std::cout << "native: window thread exiting" << std::endl;
 }
