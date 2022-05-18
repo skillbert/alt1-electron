@@ -21,13 +21,20 @@ export function initRsInstanceTracking() {
 };
 
 export function detectInstances() {
-	let hwnds = native.getRsHandles();
+	let handles = native.getRsHandles();
 
-	// Remove any currently-tracked instances that were not detected this time
-	rsInstances = rsInstances.filter((x) => hwnds.includes(x.window.handle));
+	// Make a list of currently-tracked instances that were not detected this time, for removal
+	// Note: this variable is not inlined because iterating a list while modifying it would not behave as expected
+	const removedInstances = rsInstances.filter((x) => !handles.includes(x.window.handle));
+
+	// Close and remove each one
+	for (const instance of removedInstances) {
+		instance.close();
+		rsInstances = rsInstances.filter((x) => x.window != instance.window);
+	}
 
 	// Add any new ones
-	hwnds.filter((x) => !rsInstances.map((x) => x.window.handle).includes(x)).map((x) => new RsInstance(new OSWindow(x)));
+	handles.filter((x) => !rsInstances.map((x) => x.window.handle).includes(x)).map((x) => new RsInstance(new OSWindow(x)));
 }
 
 export function getRsInstanceFromWnd(wnd: OSWindow) {
