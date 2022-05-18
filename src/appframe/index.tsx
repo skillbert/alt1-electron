@@ -160,8 +160,8 @@ function startDrag(factors: { x: number, y: number, w: number, h: number }) {
 function clickThroughEffect(minimized: boolean, rc: RectLike, rootref: React.MutableRefObject<any>) {
 	let root = rootref.current as HTMLElement;
 	if (minimized || rc) {
-		//mouse move event forwarding is only supported on windows
-		if (process.platform == "win32") {
+		if (process.platform != "linux") {
+			// Mouse move event forwarding is only supported on windows and mac; electron is trashware 🤡
 			//TODO check if this actually works when element is hidden while being hovered
 			let currenthover = root.matches(":hover");
 			thiswindow.window.setIgnoreMouseEvents(!currenthover, { forward: true });
@@ -174,9 +174,13 @@ function clickThroughEffect(minimized: boolean, rc: RectLike, rootref: React.Mut
 				root.removeEventListener("mouseenter", handler);
 				root.removeEventListener("mouseleave", handler);
 			}
+		} else {
+			// These windows can't be transparent on Linux anyway, so they don't need to have click-through
+			thiswindow.window.setIgnoreMouseEvents(false);
 		}
 
-		//fall back to polling approach
+		// mouse polling approach - obsolete
+		/*
 		let clickableels: DOMRect[] = [];
 		if (minimized) {
 			clickableels = [...document.querySelectorAll(".button,.dragbutton") as any as HTMLElement[]].map(e => e.getBoundingClientRect());
@@ -199,6 +203,7 @@ function clickThroughEffect(minimized: boolean, rc: RectLike, rootref: React.Mut
 		checkmouse();
 		let timer = setInterval(checkmouse, 100);
 		return () => clearInterval(timer);
+		*/
 	}
 	thiswindow.window.setIgnoreMouseEvents(false);
 }

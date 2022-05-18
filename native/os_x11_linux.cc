@@ -202,31 +202,31 @@ std::vector<OSWindow> OSGetRsHandles() {
 
 void OSSetWindowParent(OSWindow window, OSWindow parent) {
 	ensureConnection();
-	
+
 	// If the parent handle is 0, we're supposed to detach, not attach
 	if (parent.handle != 0) {
-		// Query the tree of the game window
+		// Query the tree and geometry of the game window
 		xcb_query_tree_cookie_t cookieTree = xcb_query_tree(connection, parent.handle);
 		xcb_query_tree_reply_t* tree = xcb_query_tree_reply(connection, cookieTree, NULL);
 		xcb_get_geometry_cookie_t cookieGeometry = xcb_get_geometry(connection, window.handle);
 		xcb_get_geometry_reply_t* geometry = xcb_get_geometry_reply(connection, cookieGeometry, NULL);
 
 		if (tree && tree->parent != tree->root) {
-			const uint32_t values[] = { 1, 33554431 };
-
 			// Generate an ID and track it
 			xcb_window_t id = xcb_generate_id(connection);
 			trackedWindows.push_back(TrackedWindow(window.handle, id));
 
+			// Set OverrideRedirect on the electron window, and request events
+			const uint32_t evalues[] = { 1 };
+			xcb_change_window_attributes(connection, window.handle, XCB_CW_OVERRIDE_REDIRECT, evalues);
+
 			// Create a new window, parented to the game's parent, with the game view's geometry and OverrideRedirect
+			const uint32_t fvalues[] = { 1, 33554431 };
 			xcb_create_window(connection, XCB_COPY_FROM_PARENT, id, tree->parent, 0, 0, geometry->width, geometry->height,
-								0, XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_OVERRIDE_REDIRECT | XCB_CW_EVENT_MASK, &values);
+								0, XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_OVERRIDE_REDIRECT | XCB_CW_EVENT_MASK, fvalues);
 
 			// Map our new frame
 			xcb_map_window(connection, id);
-
-			// Set OverrideRedirect on the electron window, and request all its events
-			xcb_change_window_attributes(connection, window.handle, XCB_CW_OVERRIDE_REDIRECT | XCB_CW_EVENT_MASK, &values);
 
 			// Parent the electron window to our frame
 			xcb_reparent_window(connection, window.handle, id, 0, 0);
@@ -236,9 +236,17 @@ void OSSetWindowParent(OSWindow window, OSWindow parent) {
 			// Start an event-handling thread if there isn't one already running
 			if (!windowThreadExists.load()) {
 				std::cout << "native: starting window thread" << std::endl;
+				
+				// The thread needs a graphics context, which it can share between all the windows in its purview:
+				// "The graphics context can be used with any drawable that has the same root and depth as the specified drawable."
+				const uint32_t gc = xcb_generate_id(connection);
+				const uint32_t gvalues[] = { 0x80AAAAAA, 0x80FFFFFF };
+				xcb_create_gc(connection, gc, id, XCB_GC_BACKGROUND | XCB_GC_FOREGROUND, gvalues);
+				
+				// And start the thread
 				windowThreadShouldRun = true;
 				windowThreadExists = true;
-				windowThread = std::thread(WindowThread, id);
+				windowThread = std::thread(WindowThread, gc);
 			}
 
 			xcb_flush(connection);
@@ -336,16 +344,30 @@ void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function c
 
 }
 
-void WindowThread(xcb_window_t window) {
+void WindowThread(uint32_t gc) {
 	xcb_generic_event_t* event;
 	while (windowThreadShouldRun.load()) {
 		event = xcb_wait_for_event(connection);
 		if (event) {
 			auto type = event->response_type & ~0x80;
 			switch (type) {
-				//default:
-				//	std::cout << "native: got event type " << type << std::endl;
+				case 0: {
+					xcb_generic_error_t* error = (xcb_generic_error_t*)event;
+					std::cout << "native: error: code " << (int)error->error_code << "; " << (int)error->major_code << "." << (int)error->minor_code << std::endl;
+					break;
+				}
+				case XCB_EXPOSE: {
+					//xcb_expose_event_t* expose = (xcb_expose_event_t*)event;
+					break;
+				}
+				default:
+					//std::cout << "native: got event type " << type << std::endl;
+					break;
 			}
+			free(event);
+		} else {
+			std::cout << "native: window thread encountered an error" << std::endl;
+			break;
 		}
 	}
 	windowThreadExists = false;

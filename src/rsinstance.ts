@@ -99,7 +99,7 @@ class ActiveRightclick {
 
 export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 	window: OSWindow;
-	overlayWindow: { browser: BrowserWindow, nativewnd: OSWindow, pin: OSWindowPin, stalledOverlay: { frameid: number, cmd: OverlayCommand[] }[] } | null;
+	overlayWindow: { browser: BrowserWindow, nativewnd: OSWindow, pin: OSWindowPin | null, stalledOverlay: { frameid: number, cmd: OverlayCommand[] }[] } | null;
 	activeRightclick: ActiveRightclick | null = null;
 	isActive = false;
 	lastBlurTime = 0;
@@ -254,7 +254,11 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 			});
 
 			let nativewnd = new OSWindow(browser.getNativeWindowHandle());
-			let pin = new OSWindowPin(nativewnd, this.window, "cover");
+			let pin: OSWindowPin | null = null;
+			if (process.platform != "linux") {
+				// pinning this on linux would make it non-transparent; electron is trashware 🤡
+				pin = new OSWindowPin(nativewnd, this.window, "cover");
+			}
 			browser.loadFile(path.resolve(__dirname, "overlayframe/index.html"));
 			browser.once("ready-to-show", () => {
 				browser.show();
