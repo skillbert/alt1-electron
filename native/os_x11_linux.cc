@@ -6,21 +6,37 @@
 #include <xcb/composite.h>
 #include <atomic>
 #include <thread>
+#include <mutex>
 #include "os.h"
 #include "linux/x11.h"
 #include "linux/shm.h"
 
 using namespace priv_os_x11;
 
+struct Frame {
+	xcb_window_t window;
+	xcb_window_t frame;
+	Frame(xcb_window_t window, xcb_window_t frame) : window(window), frame(frame) {}
+};
+
+struct TrackedEvent {
+	xcb_window_t window;
+	WindowEventType type;
+	Napi::FunctionReference callback;
+	TrackedEvent(xcb_window_t window, WindowEventType type, Napi::Function callback) : window(window), type(type), callback(Napi::Persistent(callback)) {}
+};
+
 std::vector<Frame> frames;
 std::thread windowThread;
 std::atomic<bool> windowThreadExists(false);
 std::atomic<bool> windowThreadShouldRun(false);
+std::vector<TrackedEvent> trackedEvents;
+std::mutex eventMutex;
 
 void WindowThread(xcb_window_t);
 
 xcb_window_t* GetFrame(xcb_window_t win) {
-	auto result = std::find_if(frames.begin(), frames.end(), [&win](TrackedWindow w){return w.window == win;});
+	auto result = std::find_if(frames.begin(), frames.end(), [&win](Frame w){return w.window == win;});
 	return result == frames.end() ? nullptr : &(result->frame);
 }
 
@@ -214,7 +230,7 @@ void OSSetWindowParent(OSWindow window, OSWindow parent) {
 		if (tree && tree->parent != tree->root) {
 			// Generate an ID and track it
 			xcb_window_t id = xcb_generate_id(connection);
-			frames.push_back(TrackedWindow(window.handle, id));
+			frames.push_back(Frame(window.handle, id));
 
 			// Set OverrideRedirect on the electron window, and request events
 			const uint32_t evalues[] = { 1 };
@@ -269,7 +285,7 @@ void OSSetWindowParent(OSWindow window, OSWindow parent) {
 				xcb_destroy_window(connection, *frame);
 				xcb_flush(connection);
 				frames.erase(
-					std::remove_if(frames.begin(), frames.end(), [&window](TrackedWindow w){return w.window == window.handle;}),
+					std::remove_if(frames.begin(), frames.end(), [&window](Frame w){return w.window == window.handle;}),
 					frames.end()
 				);
 			}
@@ -336,12 +352,26 @@ OSWindow OSGetActiveWindow() {
 }
 	
 
-void OSNewWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) {
-
+void OSNewWindowListener(OSWindow window, WindowEventType type, Napi::Function callback) {
+	std::lock_guard<std::mutex> guard(eventMutex);
+	std::cout << "native: add listener: window " << window.handle << ", type " << (int)type << "; there are " << trackedEvents.size() << " events" << std::endl;
+	auto event = TrackedEvent(window.handle, type, callback);
+	trackedEvents.push_back(std::move(event));
+	std::cout << "native: added listener: window " << window.handle << ", type " << (int)type << "; there are now " << trackedEvents.size() << " events" << std::endl;
 }
 
-void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) {
-
+void OSRemoveWindowListener(OSWindow window, WindowEventType type, Napi::Function callback) {
+	std::lock_guard<std::mutex> guard(eventMutex);
+	std::cout << "native: remove listener: window " << window.handle << ", type " << (int)type << "; there are " << trackedEvents.size() << " events" << std::endl;
+	trackedEvents.erase(
+		std::remove_if(
+			trackedEvents.begin(),
+			trackedEvents.end(),
+			[window, type, callback](const TrackedEvent& e){return (e.window == window.handle) && (e.type == type) && (Napi::Persistent(callback) == e.callback);}
+		),
+		trackedEvents.end()
+	);
+	std::cout << "native: removed listener: window " << window.handle << ", type " << (int)type << "; there are now " << trackedEvents.size() << " events" << std::endl;
 }
 
 void WindowThread(uint32_t gc) {
@@ -356,13 +386,16 @@ void WindowThread(uint32_t gc) {
 					std::cout << "native: error: code " << (int)error->error_code << "; " << (int)error->major_code << "." << (int)error->minor_code << std::endl;
 					break;
 				}
-				case XCB_EXPOSE: {
-					//xcb_expose_event_t* expose = (xcb_expose_event_t*)event;
+				case XCB_CONFIGURE_NOTIFY: {
 					break;
 				}
-				default:
+				case XCB_CLIENT_MESSAGE: {
+					break;
+				}
+				default: {
 					//std::cout << "native: got event type " << type << std::endl;
 					break;
+				}
 			}
 			free(event);
 		} else {
