@@ -12,7 +12,7 @@
 
 using namespace priv_os_x11;
 
-std::vector<TrackedWindow> trackedWindows;
+std::vector<Frame> frames;
 std::thread windowThread;
 std::atomic<bool> windowThreadExists(false);
 std::atomic<bool> windowThreadShouldRun(false);
@@ -20,8 +20,8 @@ std::atomic<bool> windowThreadShouldRun(false);
 void WindowThread(xcb_window_t);
 
 xcb_window_t* GetFrame(xcb_window_t win) {
-	auto result = std::find_if(trackedWindows.begin(), trackedWindows.end(), [&win](TrackedWindow w){return w.window == win;});
-	return result == trackedWindows.end() ? nullptr : &(result->frame);
+	auto result = std::find_if(frames.begin(), frames.end(), [&win](TrackedWindow w){return w.window == win;});
+	return result == frames.end() ? nullptr : &(result->frame);
 }
 
 void OSWindow::SetBounds(JSRectangle bounds) {
@@ -214,7 +214,7 @@ void OSSetWindowParent(OSWindow window, OSWindow parent) {
 		if (tree && tree->parent != tree->root) {
 			// Generate an ID and track it
 			xcb_window_t id = xcb_generate_id(connection);
-			trackedWindows.push_back(TrackedWindow(window.handle, id));
+			frames.push_back(TrackedWindow(window.handle, id));
 
 			// Set OverrideRedirect on the electron window, and request events
 			const uint32_t evalues[] = { 1 };
@@ -259,18 +259,18 @@ void OSSetWindowParent(OSWindow window, OSWindow parent) {
 		if (frame) {
 			xcb_reparent_window(connection, window.handle, rootWindow, 0, 0);
 			std::cout << "native: destroying frame " << *frame << std::endl;
-			if (trackedWindows.size() == 1) {
+			if (frames.size() == 1) {
 				windowThreadShouldRun = false;
 				xcb_destroy_window(connection, *frame);
 				xcb_flush(connection);
 				windowThread.join();
-				trackedWindows.clear();
+				frames.clear();
 			} else {
 				xcb_destroy_window(connection, *frame);
 				xcb_flush(connection);
-				trackedWindows.erase(
-					std::remove_if(trackedWindows.begin(), trackedWindows.end(), [&window](TrackedWindow w){return w.window == window.handle;}),
-					trackedWindows.end()
+				frames.erase(
+					std::remove_if(frames.begin(), frames.end(), [&window](TrackedWindow w){return w.window == window.handle;}),
+					frames.end()
 				);
 			}
 		}

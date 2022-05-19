@@ -5,10 +5,10 @@
 #include <xcb/xcb_ewmh.h>
 
 namespace priv_os_x11 {
-	struct TrackedWindow {
+	struct Frame {
 		xcb_window_t window;
 		xcb_window_t frame;
-		TrackedWindow(xcb_window_t window, xcb_window_t frame) : window(window), frame(frame) {}
+		Frame(xcb_window_t window, xcb_window_t frame) : window(window), frame(frame) {}
 	};
 
 	extern xcb_connection_t* connection;
