@@ -54,14 +54,16 @@ export async function loadSettings() {
 		let file = JSON.parse(fs.readFileSync("./config.json", "utf8"));
 		settings = checkSettings.load(file, { defaultOnError: true });
 	} catch (e) {
-		console.log("couldn't load config");
+		console.log("Failed to load config from filesystem.");
 		settings = checkSettings.default();
 
-		await fetch(`${weborigin}/data/alt1/defaultapps.json`).then(r => readJsonWithBOM(r)).then(async (r: { folder: string, name: string, url: string }[]) => {
-			for (let appbase of r) {
-				await identifyApp(new URL(`${weborigin}${appbase.url}`));
-			}
-		});
+		await fetch(`${weborigin}/data/alt1/defaultapps.json`)
+			.then(r => readJsonWithBOM(r))
+			.then(async (r: { folder: string, name: string, url: string }[]) => {
+				for (let appbase of r) {
+					await identifyApp(new URL(`${weborigin}${appbase.url}`));
+				}
+			});
 	}
 }
 

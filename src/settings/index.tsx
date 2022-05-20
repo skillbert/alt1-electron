@@ -1,43 +1,46 @@
 import * as React from "react";
+import {useEffect, useRef, useState} from "react";
 import * as ReactDom from "react-dom";
-
-
+import {ipcRenderer as ipc} from "electron";
 
 import "./style.scss";
 import "./index.html";
+import {CaptureMode} from "../native";
+import {Form, Tab, Tabs} from "react-bootstrap";
+import {FlatImageData} from "../shared";
+import CaptureTab from "./capture-tab";
 
-
-type Alt1Settings = ReturnType<typeof defaultSettings>
-
-function defaultSettings() {
-	return {
-		captMode: "opengl" as "opengl" | "directx" | "desktop",
-		captAutoDetect: true
-	};
+interface Alt1Settings {
+    captMode: CaptureMode;
+    captAutoDetect: boolean;
+    overrideScale: -1.0 | 1.0;
+    compatibleAutoToggle: boolean;
 }
 
+const defaultSettings = (): Alt1Settings => ({
+    captMode: "opengl",
+    captAutoDetect: true,
+    overrideScale: -1.0,
+    compatibleAutoToggle: true,
+});
 
-window.addEventListener("DOMContentLoaded", start);
+window.addEventListener("DOMContentLoaded", () => {
+    ReactDom.render(<Settings/>, document.getElementById("root"));
+});
 
-let settings = defaultSettings();
+const Settings: React.FunctionComponent = () => {
 
-function start() {
-	ReactDom.render(<Settings />, document.getElementById("root"));
-}
+    // TODO: useEffect on settings to send them to main process and persist in file system?
 
+    return (
+        <Tabs defaultActiveKey="capture">
+            <Tab eventKey="capture" title="Capture" style={{padding: '0 10px'}}>
+                <CaptureTab/>
+            </Tab>
+            <Tab eventKey="hotkeys" title="Hotkeys">
+                Hotkeys
+            </Tab>
+        </Tabs>
+    );
 
-function Settings() {
-	let modechange = (e: React.ChangeEvent<HTMLInputElement>) => {
-		settings.captMode = e.currentTarget.value as any;
-		start();
-	}
-	return (
-		<React.Fragment>
-			<p>Capture mode</p>
-			<label><input type="radio" value="opengl" name="captmode" onChange={modechange} checked={settings.captMode == "opengl"} />OpenGL</label>
-			<label><input type="radio" value="directx" name="captmode" onChange={modechange} checked={settings.captMode == "directx"} />DirectX</label>
-			<label><input type="radio" value="desktop" name="captmode" onChange={modechange} checked={settings.captMode == "desktop"} />Desktop</label>
-			<label><input type="checkbox" onChange={e => { settings.captAutoDetect = e.currentTarget.checked; start(); }} checked={settings.captAutoDetect} />Automatically detect capture mode</label>
-		</React.Fragment>
-	);
-}
+};

@@ -18,7 +18,7 @@ export var rsInstances: RsInstance[] = [];
 export function initRsInstanceTracking() {
 	detectInstances();
 	// I don't think we need to do any tracking as long as detectInstances() is called appropriately
-};
+}
 
 export function detectInstances() {
 	let hwnds = native.getRsHandles();

@@ -8,7 +8,7 @@ import { patchImageDataShow, relPath, sameDomainResolve, schemestring } from "./
 import { identifyApp } from "./appconfig";
 import { getActiveWindow, native, OSWindow, OSWindowPin, reloadAddon } from "./native";
 import { detectInstances, getRsInstanceFromWnd, RsInstance, rsInstances, initRsInstanceTracking } from "./rsinstance";
-import { OverlayCommand, Rectangle, RsClientState } from "./shared";
+import {FlatImageData, OverlayCommand, Rectangle, RsClientState} from "./shared";
 import { AppPermission, Bookmark, loadSettings, saveSettings, settings } from "./settings";
 import { boundMethod } from "autobind-decorator";
 import * as remoteMain from "@electron/remote/main";
@@ -170,7 +170,12 @@ export function showSettings() {
 		return;
 	}
 	settingsWnd = new BrowserWindow({
-		webPreferences: { nodeIntegration: true, webviewTag: true, contextIsolation: false },
+		icon: alt1icon,
+		webPreferences: {
+			nodeIntegration: true,
+			webviewTag: true,
+			contextIsolation: false
+		},
 	});
 	settingsWnd.loadFile(path.resolve(__dirname, "settings/index.html"));
 	settingsWnd.once("closed", e => settingsWnd = null);
@@ -295,6 +300,19 @@ function initIpcApi() {
 			captureMode: settings.captureMode
 		};
 		e.returnValue = { value: state };
+	});
+
+	ipcMain.handle("capture-full-rs", () => {
+		const rsInstance: RsInstance = rsInstances[0];
+		if (rsInstance) {
+			const bounds = rsInstance.window.getClientBounds();
+			return {
+				data: native.captureWindowMulti(rsInstance.window.handle, settings.captureMode, {main: bounds}).main,
+				width: bounds.width,
+				height: bounds.height,
+			} as FlatImageData;
+		}
+		throw new Error('No RS instance detected');
 	});
 
 	ipcMain.handle("capture", (e, x, y, width, height) => {

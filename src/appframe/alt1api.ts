@@ -28,14 +28,14 @@ ipcRenderer.on("appevent", <T extends keyof alt1types.Alt1EventType>(e, type: T,
 });
 
 function captureSync(x: number, y: number, w: number, h: number) {
-	warn("captsync", "Synchonous capture is depricated");
+	warn("captsync", "Synchonous capture is deprecated");
 	let img: SyncResponse<FlatImageData> = ipcRenderer.sendSync("capturesync", x, y, w, h);
 	if (img.error != undefined) { throw new Error(img.error); }
 	return img.value;
 }
 
-function imagedataToBase64(img: FlatImageData) {
-	warn("base64capt", "This capture api is a backward port for compatibylity and is much slower");
+export function imagedataToBase64(img: FlatImageData) {
+	warn("base64capt", "This capture api is a backward port for compatibility and is much slower");
 	const btoachars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 	let str = "";
 	let data = img.data;

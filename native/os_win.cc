@@ -1,4 +1,6 @@
 
+#include <iostream>
+#include <fstream>
 #include "os.h"
 #include <TlHelp32.h>
 #include "../libs/Alt1Native.h"
@@ -103,7 +105,10 @@ std::vector<OSWindow> OSGetRsHandles() {
 	std::vector<OSWindow> out;
 	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 	PROCESSENTRY32 process = {};
-	process.dwSize = sizeof(process);
+	process.dwSize = sizeof(PROCESSENTRY32);
+
+    std::ofstream logFile("logfile.txt");
+    logFile << "OSGetRsHandles: " << std::endl;
 
 	//Walk through all processes
 	if (Process32First(snapshot, &process)) {
@@ -112,6 +117,7 @@ std::vector<OSWindow> OSGetRsHandles() {
 				WinFindMainWindow_data data;
 				data.process_id = process.th32ProcessID;
 				data.window_handle = 0;
+				logFile << "--    " << data.process_id << " -- " << data.window_handle << std::endl;
 				EnumWindows(WinFindMainWindow_callback, (LPARAM)&data);
 				out.push_back(OSWindow(data.window_handle));
 			}
