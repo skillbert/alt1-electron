@@ -354,15 +354,12 @@ OSWindow OSGetActiveWindow() {
 
 void OSNewWindowListener(OSWindow window, WindowEventType type, Napi::Function callback) {
 	std::lock_guard<std::mutex> guard(eventMutex);
-	std::cout << "native: add listener: window " << window.handle << ", type " << (int)type << "; there are " << trackedEvents.size() << " events" << std::endl;
 	auto event = TrackedEvent(window.handle, type, callback);
 	trackedEvents.push_back(std::move(event));
-	std::cout << "native: added listener: window " << window.handle << ", type " << (int)type << "; there are now " << trackedEvents.size() << " events" << std::endl;
 }
 
 void OSRemoveWindowListener(OSWindow window, WindowEventType type, Napi::Function callback) {
 	std::lock_guard<std::mutex> guard(eventMutex);
-	std::cout << "native: remove listener: window " << window.handle << ", type " << (int)type << "; there are " << trackedEvents.size() << " events" << std::endl;
 	trackedEvents.erase(
 		std::remove_if(
 			trackedEvents.begin(),
@@ -371,7 +368,6 @@ void OSRemoveWindowListener(OSWindow window, WindowEventType type, Napi::Functio
 		),
 		trackedEvents.end()
 	);
-	std::cout << "native: removed listener: window " << window.handle << ", type " << (int)type << "; there are now " << trackedEvents.size() << " events" << std::endl;
 }
 
 void WindowThread(uint32_t gc) {
