@@ -30,7 +30,6 @@ export function detectInstances() {
 	// Close and remove each one
 	for (const instance of removedInstances) {
 		instance.close();
-		rsInstances = rsInstances.filter((x) => x.window != instance.window);
 	}
 
 	// Add any new ones
