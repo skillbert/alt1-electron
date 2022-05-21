@@ -28,12 +28,16 @@ struct TrackedEvent {
 
 std::vector<Frame> frames;
 std::thread windowThread;
-std::atomic<bool> windowThreadExists(false);
-std::atomic<bool> windowThreadShouldRun(false);
+xcb_window_t windowThreadId;
+bool windowThreadExists = false;
 std::vector<TrackedEvent> trackedEvents;
-std::mutex eventMutex;
 
-void WindowThread(xcb_window_t);
+std::mutex eventMutex;
+std::mutex frameMutex;
+std::mutex windowThreadMutex;
+
+void WindowThread();
+void StartWindowThread();
 
 xcb_window_t* GetFrame(xcb_window_t win) {
 	auto result = std::find_if(frames.begin(), frames.end(), [&win](Frame w){return w.window == win;});
@@ -42,6 +46,7 @@ xcb_window_t* GetFrame(xcb_window_t win) {
 
 void OSWindow::SetBounds(JSRectangle bounds) {
 	ensureConnection();
+	frameMutex.lock();
 	auto frame = GetFrame(this->handle);
 	if (frame) {
 		if (bounds.width > 0 && bounds.height > 0) {
@@ -63,6 +68,7 @@ void OSWindow::SetBounds(JSRectangle bounds) {
 		}
 		xcb_flush(connection);
 	}
+	frameMutex.unlock();
 }
 
 JSRectangle OSWindow::GetBounds() {
@@ -230,7 +236,9 @@ void OSSetWindowParent(OSWindow window, OSWindow parent) {
 		if (tree && tree->parent != tree->root) {
 			// Generate an ID and track it
 			xcb_window_t id = xcb_generate_id(connection);
+			frameMutex.lock();
 			frames.push_back(Frame(window.handle, id));
+			frameMutex.unlock();
 
 			// Set OverrideRedirect on the electron window, and request events
 			const uint32_t evalues[] = { 1 };
@@ -250,45 +258,30 @@ void OSSetWindowParent(OSWindow window, OSWindow parent) {
 			std::cout << "native: created frame " << id << " for electron window " << window.handle << std::endl;
 
 			// Start an event-handling thread if there isn't one already running
-			if (!windowThreadExists.load()) {
-				std::cout << "native: starting window thread" << std::endl;
-				
-				// The thread needs a graphics context, which it can share between all the windows in its purview:
-				// "The graphics context can be used with any drawable that has the same root and depth as the specified drawable."
-				const uint32_t gc = xcb_generate_id(connection);
-				const uint32_t gvalues[] = { 0x80AAAAAA, 0x80FFFFFF };
-				xcb_create_gc(connection, gc, id, XCB_GC_BACKGROUND | XCB_GC_FOREGROUND, gvalues);
-				
-				// And start the thread
-				windowThreadShouldRun = true;
-				windowThreadExists = true;
-				windowThread = std::thread(WindowThread, gc);
-			}
-
-			xcb_flush(connection);
+			StartWindowThread();
 		}
 
 		free(tree);
 		free(geometry);
 	} else {
+		frameMutex.lock();
 		auto frame = GetFrame(window.handle);
 		if (frame) {
 			xcb_reparent_window(connection, window.handle, rootWindow, 0, 0);
+			frames.erase(
+				std::remove_if(frames.begin(), frames.end(), [&window](Frame w){return w.window == window.handle;}),
+				frames.end()
+			);
 			std::cout << "native: destroying frame " << *frame << std::endl;
-			if (frames.size() == 1) {
-				windowThreadShouldRun = false;
-				xcb_destroy_window(connection, *frame);
-				xcb_flush(connection);
-				windowThread.join();
-				frames.clear();
-			} else {
-				xcb_destroy_window(connection, *frame);
-				xcb_flush(connection);
-				frames.erase(
-					std::remove_if(frames.begin(), frames.end(), [&window](Frame w){return w.window == window.handle;}),
-					frames.end()
-				);
-			}
+			xcb_destroy_window(connection, *frame);
+			xcb_flush(connection);
+		}
+		eventMutex.lock();
+		bool wait = frames.size() == 0 && trackedEvents.size() == 0;
+		eventMutex.unlock();
+		frameMutex.unlock();
+		if (wait) {
+			windowThread.join();
 		}
 	}
 }
@@ -353,13 +346,15 @@ OSWindow OSGetActiveWindow() {
 	
 
 void OSNewWindowListener(OSWindow window, WindowEventType type, Napi::Function callback) {
-	std::lock_guard<std::mutex> guard(eventMutex);
 	auto event = TrackedEvent(window.handle, type, callback);
+	eventMutex.lock();
 	trackedEvents.push_back(std::move(event));
+	eventMutex.unlock();
+	StartWindowThread();
 }
 
 void OSRemoveWindowListener(OSWindow window, WindowEventType type, Napi::Function callback) {
-	std::lock_guard<std::mutex> guard(eventMutex);
+	eventMutex.lock();
 	trackedEvents.erase(
 		std::remove_if(
 			trackedEvents.begin(),
@@ -368,11 +363,49 @@ void OSRemoveWindowListener(OSWindow window, WindowEventType type, Napi::Functio
 		),
 		trackedEvents.end()
 	);
+	frameMutex.lock();
+	bool wait = frames.size() == 0 && trackedEvents.size() == 0;
+	eventMutex.unlock();
+	frameMutex.unlock();
+	if (wait) {
+		xcb_expose_event_t event;
+		event.response_type = XCB_EXPOSE;
+		event.count = 0;
+		event.window = windowThreadId;
+		xcb_send_event(connection, false, windowThreadId, XCB_EVENT_MASK_EXPOSURE, (const char*)(&event));
+		xcb_flush(connection);
+		windowThread.join();
+	}
 }
 
-void WindowThread(uint32_t gc) {
+bool WindowThreadShouldRun() {
+	frameMutex.lock();
+	eventMutex.lock();
+	bool run = (frames.size() != 0 || trackedEvents.size() != 0);
+	frameMutex.unlock();
+	eventMutex.unlock();
+	return run;
+}
+
+void StartWindowThread() {
+	// Only start if there isn't already a window thread running
+	windowThreadMutex.lock();
+	if (!windowThreadExists) {
+		windowThreadExists = true;
+		windowThread = std::thread(WindowThread);
+
+		windowThreadId = xcb_generate_id(connection);
+		std::cout << "native: starting window thread: id " << windowThreadId << std::endl;
+		const uint32_t values[] = { XCB_EVENT_MASK_EXPOSURE };
+		xcb_create_window(connection, XCB_COPY_FROM_PARENT, windowThreadId, rootWindow, 0, 0, 1, 1, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_EVENT_MASK, values);
+		xcb_flush(connection);
+	}
+	windowThreadMutex.unlock();
+}
+
+void WindowThread() {
 	xcb_generic_event_t* event;
-	while (windowThreadShouldRun.load()) {
+	while (WindowThreadShouldRun()) {
 		event = xcb_wait_for_event(connection);
 		if (event) {
 			auto type = event->response_type & ~0x80;
@@ -388,6 +421,11 @@ void WindowThread(uint32_t gc) {
 				case XCB_CLIENT_MESSAGE: {
 					break;
 				}
+				case XCB_EXPOSE: {
+					// Not an important event, but we use XCB_EXPOSE to wake up the window thread spontaneously,
+					// so it's important to catch it here
+					break;
+				}
 				default: {
 					//std::cout << "native: got event type " << type << std::endl;
 					break;
@@ -399,6 +437,9 @@ void WindowThread(uint32_t gc) {
 			break;
 		}
 	}
+	windowThreadMutex.lock();
+	xcb_destroy_window(connection, windowThreadId);
 	windowThreadExists = false;
 	std::cout << "native: window thread exiting" << std::endl;
+	windowThreadMutex.unlock();
 }
