@@ -132,6 +132,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 	close() {
 		rsInstances.splice(rsInstances.indexOf(this), 1);
 		this.window.removeListener("close", this.close);
+		this.window.removeListener("click", this.clientClicked);
 		this.emit("close");
 		console.log(`stopped tracking rs client with handle: ${this.window.handle}`);
 	}
