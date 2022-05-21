@@ -132,8 +132,8 @@ export class OSWindowPin extends TypedEmitter<OSWindowPinEvents>{
 	}
 	unpin() {
 		native.setWindowParent(this.window.handle, BigInt(0));
-		this.window.removeListener("move", this.onmove);
-		this.window.removeListener("close", this.onclose);
+		this.parent.removeListener("move", this.onmove);
+		this.parent.removeListener("close", this.onclose);
 		this.emit("unpin");
 	}
 	updateDocking() {
