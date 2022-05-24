@@ -73,19 +73,16 @@ void OSWindow::SetBounds(JSRectangle bounds) {
 
 JSRectangle OSWindow::GetBounds() {
 	ensureConnection();
-	xcb_query_tree_cookie_t cookie = xcb_query_tree(connection, this->handle);
-	xcb_query_tree_reply_t* reply = xcb_query_tree_reply(connection, cookie, NULL);
+	frameMutex.lock();
+	auto frame = GetFrame(this->handle);
+	xcb_get_geometry_cookie_t cookie = xcb_get_geometry(connection, frame ? *frame : this->handle);
+	frameMutex.unlock();
+	xcb_get_geometry_reply_t* reply = xcb_get_geometry_reply(connection, cookie, NULL);
 	if (!reply) {
 		return JSRectangle();
 	}
-	xcb_get_geometry_cookie_t cookie2 = xcb_get_geometry(connection, reply->parent);
+	auto result = JSRectangle(reply->x, reply->y, reply->width, reply->height);
 	free(reply);
-	xcb_get_geometry_reply_t* reply2 = xcb_get_geometry_reply(connection, cookie2, NULL);
-	if (!reply2) {
-		return JSRectangle();
-	}
-	auto result = JSRectangle(reply2->x, reply2->y, reply2->width, reply2->height);
-	free(reply2);
 	return result;
 }
 
