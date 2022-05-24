@@ -4,7 +4,7 @@
 #include <napi.h>
 #include <proc/readproc.h>
 #include <xcb/composite.h>
-#include <atomic>
+#include <algorithm>
 #include <thread>
 #include <mutex>
 #include "os.h"
@@ -22,8 +22,13 @@ struct Frame {
 struct TrackedEvent {
 	xcb_window_t window;
 	WindowEventType type;
-	Napi::FunctionReference callback;
-	TrackedEvent(xcb_window_t window, WindowEventType type, Napi::Function callback) : window(window), type(type), callback(Napi::Persistent(callback)) {}
+	Napi::ThreadSafeFunction callback;
+	Napi::FunctionReference callbackRef;
+	TrackedEvent(xcb_window_t window, WindowEventType type, Napi::Function callback) :
+		window(window),
+		type(type),
+		callback(Napi::ThreadSafeFunction::New(callback.Env(), callback, "event", 0, 1, [](Napi::Env) {})),
+		callbackRef(Napi::Persistent(callback)) {}
 };
 
 std::vector<Frame> frames;
@@ -345,25 +350,45 @@ OSWindow OSGetActiveWindow() {
 void OSNewWindowListener(OSWindow window, WindowEventType type, Napi::Function callback) {
 	auto event = TrackedEvent(window.handle, type, callback);
 	eventMutex.lock();
+
+	// If this is a new window, request all its events from X server
+	if (std::find_if(trackedEvents.begin(), trackedEvents.end(), [window](TrackedEvent& e) {return e.window == window.handle;}) == trackedEvents.end()) {
+		const uint32_t values[] = { XCB_EVENT_MASK_STRUCTURE_NOTIFY };
+		xcb_change_window_attributes(connection, window.handle, XCB_CW_EVENT_MASK, values);
+	}
+
+	// Add the event
 	trackedEvents.push_back(std::move(event));
 	eventMutex.unlock();
+
+	// Start a window thread if there wasn't already one running
 	StartWindowThread();
 }
 
 void OSRemoveWindowListener(OSWindow window, WindowEventType type, Napi::Function callback) {
 	eventMutex.lock();
+
+	// Remove any matching events
 	trackedEvents.erase(
 		std::remove_if(
 			trackedEvents.begin(),
 			trackedEvents.end(),
-			[window, type, callback](const TrackedEvent& e){return (e.window == window.handle) && (e.type == type) && (Napi::Persistent(callback) == e.callback);}
+			[window, type, callback](const TrackedEvent& e){return (e.window == window.handle) && (e.type == type) && (Napi::Persistent(callback) == e.callbackRef);}
 		),
 		trackedEvents.end()
 	);
+
+	// If there are no more tracked events for this window, request X server to stop sending any events about it
+	if (std::find_if(trackedEvents.begin(), trackedEvents.end(), [window](TrackedEvent& e) {return e.window == window.handle;}) == trackedEvents.end()) {
+		const uint32_t values[] = { XCB_NONE };
+		xcb_change_window_attributes(connection, window.handle, XCB_CW_EVENT_MASK, values);
+	}
 	frameMutex.lock();
 	bool wait = frames.size() == 0 && trackedEvents.size() == 0;
 	eventMutex.unlock();
 	frameMutex.unlock();
+
+	// If the window thread has nothing left to do, send it a wakeup, then wait for it to exit
 	if (wait) {
 		xcb_expose_event_t event;
 		event.response_type = XCB_EXPOSE;
@@ -413,6 +438,18 @@ void WindowThread() {
 					break;
 				}
 				case XCB_CONFIGURE_NOTIFY: {
+					xcb_configure_notify_event_t* configure = (xcb_configure_notify_event_t*)event;
+
+					eventMutex.lock();
+					for (auto ev = trackedEvents.begin(); ev != trackedEvents.end(); ev++) {
+						if (ev->type == WindowEventType::Move && ev->window == configure->window) {
+							JSRectangle bounds = JSRectangle(0, 0, configure->width, configure->height);
+							ev->callback.BlockingCall(&bounds, [](Napi::Env env, Napi::Function jsCallback, JSRectangle* jsBounds) {
+								jsCallback.Call({jsBounds->ToJs(env), Napi::String::New(env, "end")});
+							});
+						}
+					}
+					eventMutex.unlock();
 					break;
 				}
 				case XCB_CLIENT_MESSAGE: {
