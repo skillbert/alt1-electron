@@ -278,12 +278,20 @@ void OSSetWindowParent(OSWindow window, OSWindow parent) {
 			std::remove_if(frames.begin(), frames.end(), [&window](Frame w){return w.window == window.handle;}),
 			frames.end()
 		);
-		
+
 		eventMutex.lock();
 		bool wait = frames.size() == 0 && trackedEvents.size() == 0;
 		eventMutex.unlock();
 		frameMutex.unlock();
+
+		// If the window thread has nothing left to do, send it a wakeup, then wait for it to exit
 		if (wait) {
+			xcb_expose_event_t event;
+			event.response_type = XCB_EXPOSE;
+			event.count = 0;
+			event.window = windowThreadId;
+			xcb_send_event(connection, false, windowThreadId, XCB_EVENT_MASK_EXPOSURE, (const char*)(&event));
+			xcb_flush(connection);
 			windowThread.join();
 		}
 	}
@@ -374,7 +382,13 @@ void OSRemoveWindowListener(OSWindow window, WindowEventType type, Napi::Functio
 		std::remove_if(
 			trackedEvents.begin(),
 			trackedEvents.end(),
-			[window, type, callback](const TrackedEvent& e){return (e.window == window.handle) && (e.type == type) && (Napi::Persistent(callback) == e.callbackRef);}
+			[window, type, callback](TrackedEvent& e){
+				if ((e.window == window.handle) && (e.type == type) && (Napi::Persistent(callback) == e.callbackRef)) {
+					e.callback.Release();
+					return true;
+				}
+				return false;
+			}
 		),
 		trackedEvents.end()
 	);
