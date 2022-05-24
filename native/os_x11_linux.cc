@@ -270,14 +270,15 @@ void OSSetWindowParent(OSWindow window, OSWindow parent) {
 		auto frame = GetFrame(window.handle);
 		if (frame) {
 			xcb_reparent_window(connection, window.handle, rootWindow, 0, 0);
-			frames.erase(
-				std::remove_if(frames.begin(), frames.end(), [&window](Frame w){return w.window == window.handle;}),
-				frames.end()
-			);
 			std::cout << "native: destroying frame " << *frame << std::endl;
 			xcb_destroy_window(connection, *frame);
 			xcb_flush(connection);
 		}
+		frames.erase(
+			std::remove_if(frames.begin(), frames.end(), [&window](Frame w){return w.window == window.handle;}),
+			frames.end()
+		);
+		
 		eventMutex.lock();
 		bool wait = frames.size() == 0 && trackedEvents.size() == 0;
 		eventMutex.unlock();
