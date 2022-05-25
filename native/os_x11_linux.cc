@@ -308,7 +308,8 @@ void OSCaptureDesktopMulti(OSWindow wnd, vector<CaptureRect> rects) {
 	}
 }
 
-void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects) {
+void OSCaptureMulti(OSWindow wnd, CaptureMode mode, vector<CaptureRect> rects, Napi::Env env) {
+	// Ignore capture mode, XComposite will always work
 	ensureConnection();
 	xcb_composite_redirect_window(connection, wnd.handle, XCB_COMPOSITE_REDIRECT_AUTOMATIC);
 	xcb_pixmap_t pixId = xcb_generate_id(connection);
@@ -329,20 +330,6 @@ void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects) {
 
 	free(reply);
 	xcb_free_pixmap(connection, pixId);
-}
-
-void OSCaptureMulti(OSWindow wnd, CaptureMode mode, vector<CaptureRect> rects, Napi::Env env) {
-	switch (mode) {
-		case CaptureMode::Desktop: {
-			OSCaptureDesktopMulti(wnd, rects);
-			break;
-		}
-		case CaptureMode::Window:
-			OSCaptureWindowMulti(wnd, rects);
-			break;
-		default:
-			throw Napi::RangeError::New(env, "Capture mode not supported");
-	}
 }
 
 OSWindow OSGetActiveWindow() {
