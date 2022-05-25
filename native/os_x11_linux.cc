@@ -297,17 +297,6 @@ void OSSetWindowParent(OSWindow window, OSWindow parent) {
 	}
 }
 
-void OSCaptureDesktopMulti(OSWindow wnd, vector<CaptureRect> rects) {
-	ensureConnection();
-	XShmCapture acquirer(connection, rootWindow);
-	//TODO double check and document desktop 0 special case
-	auto offset = wnd.GetClientBounds();
-
-	for (CaptureRect &rect : rects) {
-		acquirer.copy(reinterpret_cast<char*>(rect.data), rect.size, rect.rect.x + offset.x, rect.rect.y + offset.y, rect.rect.width, rect.rect.height);
-	}
-}
-
 void OSCaptureMulti(OSWindow wnd, CaptureMode mode, vector<CaptureRect> rects, Napi::Env env) {
 	// Ignore capture mode, XComposite will always work
 	ensureConnection();
