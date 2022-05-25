@@ -27,7 +27,7 @@ struct TrackedEvent {
 	TrackedEvent(xcb_window_t window, WindowEventType type, Napi::Function callback) :
 		window(window),
 		type(type),
-		callback(Napi::ThreadSafeFunction::New(callback.Env(), callback, "event", 0, 1, [](Napi::Env) {})),
+		callback(Napi::ThreadSafeFunction::New(callback.Env(), callback, "event", 1, 1, [](Napi::Env) {})),
 		callbackRef(Napi::Persistent(callback)) {}
 };
 
@@ -460,8 +460,8 @@ void WindowThread() {
 					for (auto ev = trackedEvents.begin(); ev != trackedEvents.end(); ev++) {
 						if (ev->type == WindowEventType::Move && ev->window == configure->window) {
 							JSRectangle bounds = JSRectangle(0, 0, configure->width, configure->height);
-							ev->callback.BlockingCall(&bounds, [](Napi::Env env, Napi::Function jsCallback, JSRectangle* jsBounds) {
-								jsCallback.Call({jsBounds->ToJs(env), Napi::String::New(env, "end")});
+							ev->callback.BlockingCall([bounds](Napi::Env env, Napi::Function jsCallback) {
+								jsCallback.Call({bounds.ToJs(env), Napi::String::New(env, "end")});
 							});
 						}
 					}
