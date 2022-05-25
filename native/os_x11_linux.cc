@@ -417,11 +417,12 @@ void OSRemoveWindowListener(OSWindow window, WindowEventType type, Napi::Functio
 
 bool WindowThreadShouldRun() {
 	frameMutex.lock();
-	eventMutex.lock();
-	bool run = (frames.size() != 0 || trackedEvents.size() != 0);
+	bool anyFrames = frames.size() != 0;
 	frameMutex.unlock();
+	eventMutex.lock();
+	bool anyEvents = trackedEvents.size() != 0;
 	eventMutex.unlock();
-	return run;
+	return anyFrames || anyEvents;
 }
 
 void StartWindowThread() {
