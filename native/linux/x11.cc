@@ -18,12 +18,7 @@ namespace priv_os_x11 {
 	std::shared_mutex atoms_mtx;
 
 	void ensureConnection() {
-		if (connection != NULL) {
-			return;
-		}
-
 		std::lock_guard<std::mutex> lock(conn_mtx);
-		// check again with lock
 		if (connection != NULL) {
 			return;
 		}
