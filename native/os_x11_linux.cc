@@ -13,12 +13,6 @@
 
 using namespace priv_os_x11;
 
-struct Frame {
-	xcb_window_t window;
-	xcb_window_t frame;
-	Frame(xcb_window_t window, xcb_window_t frame) : window(window), frame(frame) {}
-};
-
 struct TrackedEvent {
 	xcb_window_t window;
 	WindowEventType type;
@@ -31,100 +25,65 @@ struct TrackedEvent {
 		callbackRef(Napi::Persistent(callback)) {}
 };
 
-std::vector<Frame> frames;
 std::thread windowThread;
 xcb_window_t windowThreadId;
 bool windowThreadExists = false;
 std::vector<TrackedEvent> trackedEvents;
 
 std::mutex eventMutex;
-std::mutex frameMutex;
 std::mutex windowThreadMutex;
 
 void WindowThread();
 void StartWindowThread();
 
-xcb_window_t* GetFrame(xcb_window_t win) {
-	auto result = std::find_if(frames.begin(), frames.end(), [&win](Frame w){return w.window == win;});
-	return result == frames.end() ? nullptr : &(result->frame);
-}
-
 void OSWindow::SetBounds(JSRectangle bounds) {
 	ensureConnection();
-	frameMutex.lock();
-	auto frame = GetFrame(this->handle);
-	if (frame) {
-		if (bounds.width > 0 && bounds.height > 0) {
-			int32_t config[] = {
-				bounds.x,
-				bounds.y,
-				bounds.width,
-				bounds.height,
-			};
-			xcb_configure_window(connection, *frame, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, &config);
-			int32_t childConfig[] = { 0, 0, bounds.width, bounds.height };
-			xcb_configure_window(connection, this->handle, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, &childConfig);
-		} else {
-			int32_t config[] = {
-				bounds.x,
-				bounds.y,
-			};
-			xcb_configure_window(connection, *frame, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, &config);
-		}
-		xcb_flush(connection);
+	if (bounds.width > 0 && bounds.height > 0) {
+		int32_t config[] = {
+			bounds.x,
+			bounds.y,
+			bounds.width,
+			bounds.height,
+		};
+		xcb_configure_window(connection, this->handle, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, &config);
+	} else {
+		int32_t config[] = {
+			bounds.x,
+			bounds.y,
+		};
+		xcb_configure_window(connection, this->handle, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, &config);
 	}
-	frameMutex.unlock();
+	xcb_flush(connection);
 }
 
 JSRectangle OSWindow::GetBounds() {
-	ensureConnection();
-	frameMutex.lock();
-	auto frame = GetFrame(this->handle);
-	xcb_get_geometry_cookie_t cookie = xcb_get_geometry(connection, frame ? *frame : this->handle);
-	frameMutex.unlock();
-	xcb_get_geometry_reply_t* reply = xcb_get_geometry_reply(connection, cookie, NULL);
-	if (!reply) {
-		return JSRectangle();
-	}
-	auto result = JSRectangle(reply->x, reply->y, reply->width, reply->height);
-	free(reply);
-	return result;
+	return GetClientBounds();
 }
 
 JSRectangle OSWindow::GetClientBounds() {
 	ensureConnection();
-	xcb_get_geometry_cookie_t cookie = xcb_get_geometry(connection, this->handle);
-	xcb_get_geometry_reply_t* reply = xcb_get_geometry_reply(connection, cookie, NULL);
-	if (!reply) {
+	xcb_generic_error_t *error = NULL;
+	xcb_get_geometry_cookie_t gcookie = xcb_get_geometry(connection, this->handle);
+	xcb_get_geometry_reply_t* geometry = xcb_get_geometry_reply(connection, gcookie, &error);
+	if (error != NULL) {
+		free(error);
 		return JSRectangle();
 	}
-
-	auto x = reply->x;
-	auto y = reply->y;
-	auto width = reply->width;
-	auto height = reply->height;
-	auto window = this->handle;
-	while (true) {
-		xcb_query_tree_cookie_t cookieTree = xcb_query_tree(connection, window);
-		xcb_query_tree_reply_t* replyTree = xcb_query_tree_reply(connection, cookieTree, NULL);
-		if (replyTree == NULL || replyTree->parent == reply->root) {
-			break;
-		}
-		window = replyTree->parent;
-		free(reply);
-		free(replyTree);
-
-		cookie = xcb_get_geometry(connection, window);
-		reply = xcb_get_geometry_reply(connection, cookie, NULL);
-		if (reply == NULL) {
-			break;
-		}
-
-		x += reply->x;
-		y += reply->y;
+	error = NULL;
+	xcb_translate_coordinates_cookie_t tcookie = xcb_translate_coordinates(connection, this->handle, rootWindow, geometry->x, geometry->y);
+	xcb_translate_coordinates_reply_t* translation = xcb_translate_coordinates_reply(connection, tcookie, &error);
+	if (error != NULL) {
+		free(error);
+		free(geometry);
+		return JSRectangle();
 	}
-	free(reply);
-	return JSRectangle(x, y, width, height);
+	auto x = translation->dst_x;
+    auto y = translation->dst_y;
+    auto w = geometry->width;
+    auto h = geometry->height;
+	free(geometry);
+	free(translation);
+	return JSRectangle(x, y, w, h);
 }
 
 bool OSWindow::IsValid() {
@@ -229,71 +188,10 @@ void OSSetWindowParent(OSWindow window, OSWindow parent) {
 
 	// If the parent handle is 0, we're supposed to detach, not attach
 	if (parent.handle != 0) {
-		// Query the tree and geometry of the game window
-		xcb_query_tree_cookie_t cookieTree = xcb_query_tree(connection, parent.handle);
-		xcb_query_tree_reply_t* tree = xcb_query_tree_reply(connection, cookieTree, NULL);
-		xcb_get_geometry_cookie_t cookieGeometry = xcb_get_geometry(connection, window.handle);
-		xcb_get_geometry_reply_t* geometry = xcb_get_geometry_reply(connection, cookieGeometry, NULL);
-
-		if (tree && tree->parent != tree->root) {
-			// Generate an ID and track it
-			xcb_window_t id = xcb_generate_id(connection);
-			frameMutex.lock();
-			frames.push_back(Frame(window.handle, id));
-			frameMutex.unlock();
-
-			// Set OverrideRedirect on the electron window, and request events
-			const uint32_t evalues[] = { 1 };
-			xcb_change_window_attributes(connection, window.handle, XCB_CW_OVERRIDE_REDIRECT, evalues);
-
-			// Create a new window, parented to the game's parent, with the game view's geometry and OverrideRedirect
-			const uint32_t fvalues[] = { 1, 33554431 };
-			xcb_create_window(connection, XCB_COPY_FROM_PARENT, id, tree->parent, 0, 0, geometry->width, geometry->height,
-								0, XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_OVERRIDE_REDIRECT | XCB_CW_EVENT_MASK, fvalues);
-
-			// Map our new frame
-			xcb_map_window(connection, id);
-
-			// Parent the electron window to our frame
-			xcb_reparent_window(connection, window.handle, id, 0, 0);
-
-			std::cout << "native: created frame " << id << " for electron window " << window.handle << std::endl;
-
-			// Start an event-handling thread if there isn't one already running
-			StartWindowThread();
-		}
-
-		free(tree);
-		free(geometry);
+		xcb_change_property(connection, XCB_PROP_MODE_REPLACE, window.handle, XCB_ATOM_WM_TRANSIENT_FOR, XCB_ATOM_WINDOW, 32, 1, &parent.handle);
 	} else {
-		frameMutex.lock();
-		auto frame = GetFrame(window.handle);
-		if (frame) {
-			xcb_reparent_window(connection, window.handle, rootWindow, 0, 0);
-			std::cout << "native: destroying frame " << *frame << std::endl;
-			xcb_destroy_window(connection, *frame);
-			xcb_flush(connection);
-		}
-		frames.erase(
-			std::remove_if(frames.begin(), frames.end(), [&window](Frame w){return w.window == window.handle;}),
-			frames.end()
-		);
-
-		eventMutex.lock();
-		bool wait = frames.size() == 0 && trackedEvents.size() == 0;
-		eventMutex.unlock();
-		frameMutex.unlock();
-
-		// If the window thread has nothing left to do, send it a wakeup, then wait for it to exit
-		if (wait) {
-			xcb_expose_event_t event;
-			event.response_type = XCB_EXPOSE;
-			event.count = 0;
-			event.window = windowThreadId;
-			xcb_send_event(connection, false, windowThreadId, XCB_EVENT_MASK_EXPOSURE, (const char*)(&event));
-			xcb_flush(connection);
-			windowThread.join();
-		}
+		xcb_delete_property(connection, window.handle, XCB_ATOM_WM_TRANSIENT_FOR);
+		xcb_flush(connection);
 	}
 }
 
@@ -374,10 +272,8 @@ void OSRemoveWindowListener(OSWindow window, WindowEventType type, Napi::Functio
 		const uint32_t values[] = { XCB_NONE };
 		xcb_change_window_attributes(connection, window.handle, XCB_CW_EVENT_MASK, values);
 	}
-	frameMutex.lock();
-	bool wait = frames.size() == 0 && trackedEvents.size() == 0;
+	bool wait = trackedEvents.size() == 0;
 	eventMutex.unlock();
-	frameMutex.unlock();
 
 	// If the window thread has nothing left to do, send it a wakeup, then wait for it to exit
 	if (wait) {
@@ -392,13 +288,10 @@ void OSRemoveWindowListener(OSWindow window, WindowEventType type, Napi::Functio
 }
 
 bool WindowThreadShouldRun() {
-	frameMutex.lock();
-	bool anyFrames = frames.size() != 0;
-	frameMutex.unlock();
 	eventMutex.lock();
 	bool anyEvents = trackedEvents.size() != 0;
 	eventMutex.unlock();
-	return anyFrames || anyEvents;
+	return anyEvents;
 }
 
 void StartWindowThread() {
@@ -435,7 +328,7 @@ void WindowThread() {
 					eventMutex.lock();
 					for (auto ev = trackedEvents.begin(); ev != trackedEvents.end(); ev++) {
 						if (ev->type == WindowEventType::Move && ev->window == configure->window) {
-							JSRectangle bounds = JSRectangle(0, 0, configure->width, configure->height);
+							JSRectangle bounds = JSRectangle(configure->x, configure->y, configure->width, configure->height);
 							ev->callback.BlockingCall([bounds](Napi::Env env, Napi::Function jsCallback) {
 								jsCallback.Call({bounds.ToJs(env), Napi::String::New(env, "end")});
 							});
