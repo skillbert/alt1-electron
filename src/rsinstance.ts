@@ -261,12 +261,13 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 			});
 
 			let nativewnd = new OSWindow(browser.getNativeWindowHandle());
-			let pin: OSWindowPin | null = null;
-			if (process.platform != "linux") {
-				// pinning this on linux would make it non-transparent; electron is trashware 🤡
-				pin = new OSWindowPin(nativewnd, this.window, "cover");
-			}
+			let pin: OSWindowPin = new OSWindowPin(nativewnd, this.window, "cover");
 			browser.loadFile(path.resolve(__dirname, "overlayframe/index.html"));
+			browser.on("closed", e => {
+				pin.unpin();
+				this.overlayWindow = null;
+				console.log("overlay closed");
+			});
 			browser.once("ready-to-show", () => {
 				browser.show();
 			});
@@ -274,10 +275,6 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 				for (let stalled of this.overlayWindow!.stalledOverlay) {
 					browser.webContents.send("overlay", stalled.frameid, stalled.cmd);
 				}
-			});
-			browser.on("closed", e => {
-				this.overlayWindow = null;
-				console.log("overlay closed");
 			});
 			browser.setIgnoreMouseEvents(true);
 			this.overlayWindow = { browser, nativewnd, pin, stalledOverlay: [{ frameid: frameid, cmd: commands }] };
