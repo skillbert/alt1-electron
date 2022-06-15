@@ -243,7 +243,6 @@ struct TrackedEvent {
 	Napi::FunctionReference callback;
 	std::vector<std::shared_ptr<WindowsEventHook>> hooks;
 	TrackedEvent(OSWindow wnd, WindowEventType type, Napi::Function cb);
-	~TrackedEvent();
 	//allow move assign
 	TrackedEvent(TrackedEvent&& other) noexcept { 
 		*this = std::move(other);
@@ -403,7 +402,4 @@ TrackedEvent::TrackedEvent(OSWindow wnd, WindowEventType type, Napi::Function cb
 	default:
 		assert(false);
 	}
-}
-TrackedEvent::~TrackedEvent() {
-	this->callback.Reset();
 }

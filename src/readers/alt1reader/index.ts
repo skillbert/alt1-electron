@@ -3,16 +3,16 @@ import * as OCR from "@alt1/ocr";
 import RightClickReader from "../rightclick";
 
 const chatfonts: { name: TextResult["font"], font: OCR.FontDefinition }[] = [
-	//TODO expose the new font files from @alt1/chatbox package
-	// { name: "11pt", font: require("@alt1/ocr/fonts/chat_8px.js") },
-	// { name: "13pt", font: require("@alt1/ocr/fonts/chat_10px.js") },
-	// { name: "15pt", font: require("@alt1/ocr/fonts/chat_11px.js") },
-	// { name: "17pt", font: require("@alt1/ocr/fonts/chat_13px.js") }
+	{ name: "10pt", font: require("@alt1/ocr/fonts/chatbox/10pt.js") },
+	{ name: "12pt", font: require("@alt1/ocr/fonts/chatbox/12pt.js") },
+	{ name: "14pt", font: require("@alt1/ocr/fonts/chatbox/14pt.js") },
+	{ name: "16pt", font: require("@alt1/ocr/fonts/chatbox/16pt.js") },
+	{ name: "18pt", font: require("@alt1/ocr/fonts/chatbox/18pt.js") },
 ];
 
 type TextResult = {
 	type: "text",
-	font: "11pt" | "13pt" | "15pt" | "17pt",
+	font: "10pt" | "12pt" | "14pt" | "16pt" | "18pt",//larger than 18 has unreasonable perf cost
 	line: ReturnType<typeof OCR["findReadLine"]>
 }
 

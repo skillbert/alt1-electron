@@ -18,7 +18,7 @@
 		"@alt1/base": "^1.0.0-alpha.2",
 		"@alt1/font-loader": "^1.0.0-alpha.2",
 		"@alt1/imagedata-loader": "^1.0.0-alpha.2",
-		"@alt1/ocr": "^1.0.0-alpha.2",
+		"@alt1/ocr": "^1.0.0-alpha.6",
 		"@alt1/webpack": "^1.0.0-alpha.5",
 		"@types/autobind-decorator": "^2.1.0",
 		"@types/classnames": "^2.2.11",
