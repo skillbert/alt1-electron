@@ -354,10 +354,9 @@ void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject
 		break; }
 	case EVENT_OBJECT_CREATE: {
 		if (hwnd != 0) {
-			int nMaxCount = 32;
-			wchar_t className[nMaxCount];
-			char name[nMaxCount];
-			if (!GetClassNameW(hwnd, className, nMaxCount)) {
+			wchar_t className[32];
+			char name[32];
+			if (!GetClassNameW(hwnd, className, 32)) {
 				if (WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)wname, -1, (LPSTR)&name, sizeof name, NULL, NULL) != 0) {
 					if (strcmp(name, "RuneScape") == 0) {
 						// The new object is in fact a RuneScape window
