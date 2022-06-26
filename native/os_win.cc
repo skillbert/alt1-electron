@@ -1,6 +1,7 @@
 
 #include "os.h"
 #include <TlHelp32.h>
+#include <memory>
 #include "../libs/Alt1Native.h"
 
 /*
@@ -240,7 +241,7 @@ struct TrackedEvent {
 	OSWindow wnd;
 	WindowEventType type;
 	int lastCalledId = 0;//used to determine if this callback was called already
-	Napi::FunctionReference callback;
+	std::shared_ptr<Napi::FunctionReference> callback;
 	std::vector<std::shared_ptr<WindowsEventHook>> hooks;
 	TrackedEvent(OSWindow wnd, WindowEventType type, Napi::Function cb);
 	//allow move assign
@@ -281,7 +282,7 @@ void OSNewWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) 
 void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) {
 	const TrackedEvent* ev = nullptr;
 	for (auto it = windowHandlers.begin(); it != windowHandlers.end(); it++) {
-		if (it->type == type && it->wnd == wnd && it->callback == Napi::Persistent(cb)) {
+		if (it->type == type && it->wnd == wnd && (*it->callback) == Napi::Persistent(cb)) {
 			windowHandlers.erase(it);
 			break;
 		}
@@ -292,17 +293,17 @@ void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function c
 //return true from cond if the handler matches and should be called
 template<typename F,typename COND>
 void iterateHandlers(COND cond, F tracker) {
-	// This will only call the first 256 matching events in the window handlers list. Probably enough.
-	TrackedEvent* callbacks[256];
+	// This will only call the first 64 matching events in the window handlers list. Probably enough.
+	std::shared_ptr<Napi::FunctionReference> callbacks[64];
 	size_t count = 0;
 	for (auto it = windowHandlers.begin(); it != windowHandlers.end(); it++) {
-		if (cond(*it) && count < 256) {
-			callbacks[count] = &*it;
+		if (cond(*it) && count < 64) {
+			callbacks[count] = it->callback;
 			count += 1;
 		}
 	}
 	for (size_t i = 0; i < count; i += 1) {
-		tracker(*callbacks[i]);
+		tracker(callbacks[i]);
 	}
 }
 
@@ -314,23 +315,23 @@ void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject
 		case EVENT_OBJECT_STATECHANGE:
 		case EVENT_OBJECT_DESTROY:
 			iterateHandlers(
-				[&](const TrackedEvent& h) {return hwnd == h.wnd.handle && h.type == WindowEventType::Close; },
-				[&](const TrackedEvent& h) {
-					auto env = h.callback.Env();
+				[hwnd](const TrackedEvent& h) {return hwnd == h.wnd.handle && h.type == WindowEventType::Close; },
+				[](const std::shared_ptr<Napi::FunctionReference>& h) {
+					auto env = h->Env();
 					Napi::HandleScope scope(env);
 					//TODO more intelligent way to deal with js land callback errors?
-					try { h.callback.MakeCallback(env.Global(), {}); }
+					try { h->MakeCallback(env.Global(), {}); }
 					catch (...) {}
 				});
 			break;
 		case EVENT_SYSTEM_CAPTURESTART: {
 			auto windowhwnd = GetAncestor(hwnd, GA_ROOT);
 			iterateHandlers(
-				[&](const TrackedEvent& h) {return windowhwnd == h.wnd.handle && h.type == WindowEventType::Click; },
-				[&](const TrackedEvent& h) {
-					auto env = h.callback.Env();
+				[windowhwnd](const TrackedEvent& h) {return windowhwnd == h.wnd.handle && h.type == WindowEventType::Click; },
+				[](const std::shared_ptr<Napi::FunctionReference>& h) {
+					auto env = h->Env();
 					Napi::HandleScope scope(env);
-					try { h.callback.MakeCallback(env.Global(), {}); }
+					try { h->MakeCallback(env.Global(), {}); }
 					catch (...) {}
 				});
 			break;
@@ -341,11 +342,11 @@ void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject
 			JSRectangle bounds = wnd.GetBounds();
 			const char* phase = (event == EVENT_SYSTEM_MOVESIZEEND ? "end" : event == EVENT_SYSTEM_MOVESIZESTART ? "start" : "moving");
 			iterateHandlers(
-				[&](const TrackedEvent& h) {return hwnd == h.wnd.handle && h.type == WindowEventType::Move; },
-				[&](const TrackedEvent& h) {
-					auto env = h.callback.Env();
+				[hwnd](const TrackedEvent& h) {return hwnd == h.wnd.handle && h.type == WindowEventType::Move; },
+				[bounds, phase](const std::shared_ptr<Napi::FunctionReference>& h) {
+					auto env = h->Env();
 					Napi::HandleScope scope(env);
-					try { h.callback.MakeCallback(env.Global(), { bounds.ToJs(env),Napi::String::New(env, phase) }); }
+					try { h->MakeCallback(env.Global(), { bounds.ToJs(env),Napi::String::New(env, phase) }); }
 					catch (...) {}
 				});
 			break;
@@ -359,11 +360,11 @@ void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject
 						if (strcmp(name, "JagWindow") == 0) {
 							// The new object is in fact a RuneScape window
 							iterateHandlers(
-								[&](const TrackedEvent& h) {return (h.wnd.handle == 0 || hwnd == h.wnd.handle) && h.type == WindowEventType::Show; },
-								[&](const TrackedEvent& h) {
-									auto env = h.callback.Env();
+								[hwnd](const TrackedEvent& h) {return (h.wnd.handle == 0 || hwnd == h.wnd.handle) && h.type == WindowEventType::Show; },
+								[hwnd, event](const std::shared_ptr<Napi::FunctionReference>& h) {
+									auto env = h->Env();
 									Napi::HandleScope scope(env);
-									try { h.callback.MakeCallback(env.Global(), { Napi::BigInt::New(env,(uint64_t)hwnd),Napi::Number::New(env,event) }); }
+									try { h->MakeCallback(env.Global(), { Napi::BigInt::New(env,(uint64_t)hwnd),Napi::Number::New(env,event) }); }
 									catch (...) {}
 								});
 						}
@@ -378,8 +379,8 @@ void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject
 TrackedEvent::TrackedEvent(OSWindow wnd, WindowEventType type, Napi::Function cb) {
 	this->wnd = wnd;
 	this->type = type;
-	this->callback = Napi::Persistent(cb);
-	this->callback.SuppressDestruct();
+	this->callback = std::make_shared<Napi::FunctionReference>(Napi::Persistent(cb));
+	this->callback->SuppressDestruct();
 	DWORD pid;
 	//TODO error handling
 	GetWindowThreadProcessId(wnd.handle, &pid);
