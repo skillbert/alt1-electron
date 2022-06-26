@@ -312,7 +312,6 @@ void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject
 
 	vector<Napi::Value> args;
 	switch (event) {
-		case EVENT_OBJECT_STATECHANGE:
 		case EVENT_OBJECT_DESTROY:
 			iterateHandlers(
 				[hwnd](const TrackedEvent& h) {return hwnd == h.wnd.handle && h.type == WindowEventType::Close; },
