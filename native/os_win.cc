@@ -362,8 +362,6 @@ void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject
 					if (WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)wname, -1, (LPSTR)&name, sizeof name, NULL, NULL) != 0) {
 						if (strcmp(name, "JagWindow") == 0) {
 							// The new object is in fact a RuneScape window
-							DWORD pid = 0;
-							GetWindowThreadProcessId(hwnd, &pid);
 							iterateHandlers(
 								[&](const TrackedEvent& h) {return (h.wnd.handle == 0 || hwnd == h.wnd.handle) && h.type == WindowEventType::Show; },
 								[&](const TrackedEvent& h) {
@@ -407,10 +405,8 @@ TrackedEvent::TrackedEvent(OSWindow wnd, WindowEventType type, Napi::Function cb
 		};
 		break;
 	case WindowEventType::Show:
-		//TODO don't need both here, currently spamming basically all event under all windows (hwnd=0)
 		this->hooks = {
 			WindowsEventHook::GetHook(wnd.handle,WindowsEventGroup::Object),
-			WindowsEventHook::GetHook(wnd.handle,WindowsEventGroup::System),
 		};
 		break;
 	default:
