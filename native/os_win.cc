@@ -288,26 +288,22 @@ void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function c
 	}
 }
 
-//used to determine which callbacks we called already
-int hookprocCount = 0;
-
 //need this weird function to deal with the possibility of the list being modified from the js callback
 //return true from cond if the handler matches and should be called
 template<typename F,typename COND>
 void iterateHandlers(COND cond, F tracker) {
-	hookprocCount++;
-	bool changed;
-	do {
-		changed = false;
-		for (auto it = windowHandlers.begin(); it != windowHandlers.end(); it++) {
-			if (it->lastCalledId != hookprocCount && cond(*it)) {
-				it->lastCalledId = hookprocCount;
-				changed = true;
-				tracker(*it);
-				break;
-			}
+	// This will only call the first 256 matching events in the window handlers list. Probably enough.
+	TrackedEvent* callbacks[256];
+	size_t count = 0;
+	for (auto it = windowHandlers.begin(); it != windowHandlers.end(); it++) {
+		if (cond(*it) && count < 256) {
+			callbacks[count] = &*it;
+			count += 1;
 		}
-	} while (changed);
+	}
+	for (size_t i = 0; i < count; i += 1) {
+		tracker(*callbacks[i]);
+	}
 }
 
 void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD idEventThread, DWORD dwmsEventTime) {
