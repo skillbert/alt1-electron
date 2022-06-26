@@ -352,18 +352,31 @@ void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject
 				catch (...) {}
 			});
 		break; }
-	case EVENT_OBJECT_UNCLOAKED:
-	case EVENT_SYSTEM_FOREGROUND:
-	case EVENT_OBJECT_SHOW: {
-		iterateHandlers(
-			[&](const TrackedEvent& h) {return (h.wnd.handle == 0 || hwnd == h.wnd.handle) && h.type == WindowEventType::Show; },
-			[&](const TrackedEvent& h) {
-				auto env = h.callback.Env();
-				Napi::HandleScope scope(env);
-				try { h.callback.MakeCallback(env.Global(), { Napi::BigInt::New(env,(uint64_t)hwnd),Napi::Number::New(env,event) }); }
-				catch (...) {}
-			});
-		break; }
+	case EVENT_OBJECT_CREATE: {
+		if (hwnd != 0) {
+			int nMaxCount = 32;
+			wchar_t className[nMaxCount];
+			char name[nMaxCount];
+			if (!GetClassNameW(hwnd, className, nMaxCount)) {
+				if (WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)wname, -1, (LPSTR)&name, sizeof name, NULL, NULL) != 0) {
+					if (strcmp(name, "RuneScape") == 0) {
+						// The new object is in fact a RuneScape window
+						DWORD pid = 0;
+						GetWindowThreadProcessId(hwnd, &pid);
+						iterateHandlers(
+							[&](const TrackedEvent& h) {return (h.wnd.handle == 0 || hwnd == h.wnd.handle) && h.type == WindowEventType::Show; },
+							[&](const TrackedEvent& h) {
+								auto env = h.callback.Env();
+								Napi::HandleScope scope(env);
+								try { h.callback.MakeCallback(env.Global(), { Napi::BigInt::New(env,(uint64_t)hwnd),Napi::Number::New(env,event) }); }
+								catch (...) {}
+							});
+						break; }
+					}
+				}
+			}
+			
+		}
 	}
 }
 

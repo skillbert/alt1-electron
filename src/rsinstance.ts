@@ -15,10 +15,16 @@ import RightClickReader from "./readers/rightclick";
 
 export var rsInstances: RsInstance[] = [];
 
+const newRsWindow = (handle) => new RsInstance(new OSWindow(handle));
+
 export function initRsInstanceTracking() {
 	detectInstances();
-	// I don't think we need to do any tracking as long as detectInstances() is called appropriately
+	OSNullWindow.on("show", newRsWindow);
 };
+
+export function stopRsInstanceTracking() {
+	OSNullWindow.removeListener("show", newRsWindow);
+}
 
 export function detectInstances() {
 	let handles = native.getRsHandles();

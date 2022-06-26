@@ -7,7 +7,7 @@ import { handleSchemeArgs } from "./schemehandler";
 import { patchImageDataShow, relPath, sameDomainResolve, schemestring } from "./lib";
 import { identifyApp } from "./appconfig";
 import { getActiveWindow, native, OSWindow, OSWindowPin, reloadAddon } from "./native";
-import { detectInstances, getRsInstanceFromWnd, RsInstance, rsInstances, initRsInstanceTracking } from "./rsinstance";
+import { detectInstances, getRsInstanceFromWnd, RsInstance, rsInstances, initRsInstanceTracking, stopRsInstanceTracking } from "./rsinstance";
 import { OverlayCommand, Rectangle, RsClientState } from "./shared";
 import { AppPermission, Bookmark, loadSettings, saveSettings, settings } from "./settings";
 import { boundMethod } from "autobind-decorator";
@@ -44,6 +44,7 @@ remoteMain.initialize();
 
 app.on("before-quit", e => {
 	rsInstances.forEach(c => c.close());
+	stopRsInstanceTracking();
 	saveSettings();
 });
 app.on("second-instance", (e, argv, cwd) => handleSchemeArgs(argv));

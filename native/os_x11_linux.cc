@@ -29,9 +29,11 @@ std::thread windowThread;
 xcb_window_t windowThreadId;
 bool windowThreadExists = false;
 std::vector<TrackedEvent> trackedEvents;
+size_t rsDepth = 0;
 
-std::mutex eventMutex;
-std::mutex windowThreadMutex;
+std::mutex eventMutex; // Locks the trackedEvents vector
+std::mutex windowThreadMutex; // Locks windowThread and windowThreadId. Should NEVER be locked from inside the window thread
+std::mutex rsDepthMutex; // Locks the rsDepth variable
 
 void WindowThread();
 void StartWindowThread();
@@ -133,8 +135,30 @@ OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
 	return OSWindow(handleint);
 }
 
-void GetRsHandlesRecursively(const xcb_window_t window, std::vector<OSWindow>* out, unsigned int* deepest, unsigned int depth = 0) {
-	const uint32_t long_length = 4096;
+bool IsRsWindow(const xcb_window_t window) {
+	const uint32_t long_length = 64; // Any length higher than 2x+3 of the longest string we may match is fine
+	// Check window class (WM_CLASS property); this is set by the application controlling the window
+	xcb_get_property_cookie_t cookieProp = xcb_get_property(connection, 0, window, XCB_ATOM_WM_CLASS, XCB_ATOM_STRING, 0, long_length);
+	xcb_get_property_reply_t* replyProp = xcb_get_property_reply(connection, cookieProp, NULL);
+	if (replyProp != NULL) {
+		auto len = xcb_get_property_value_length(replyProp);
+		// if len == long_length then that means we didn't read the whole property, so discard.
+		if (len > 0 && (uint32_t)len < long_length) {
+			char buffer[long_length] = { 0 };
+			memcpy(buffer, xcb_get_property_value(replyProp), len);
+			// first is instance name, then class name - both null terminated. we want class name.
+			const char* classname = buffer + strlen(buffer) + 1;
+			if (strcmp(classname, "RuneScape") == 0 || strcmp(classname, "steam_app_1343400") == 0) {
+				free(replyProp);
+				return true;
+			}
+		}
+	}
+	free(replyProp);
+	return false;
+}
+
+void GetRsHandlesRecursively(const xcb_window_t window, std::vector<OSWindow>* out, unsigned int depth = 0) {
 	xcb_query_tree_cookie_t cookie = xcb_query_tree(connection, window);
 	xcb_query_tree_reply_t* reply = xcb_query_tree_reply(connection, cookie, NULL);
 	if (reply == NULL) {
@@ -144,32 +168,21 @@ void GetRsHandlesRecursively(const xcb_window_t window, std::vector<OSWindow>* o
 	xcb_window_t* children = xcb_query_tree_children(reply);
 
 	for (auto i = 0; i < xcb_query_tree_children_length(reply); i++) {
-		// First, check WM_CLASS for either "RuneScape" or "steam_app_1343400"
 		xcb_window_t child = children[i];
-		xcb_get_property_cookie_t cookieProp = xcb_get_property(connection, 0, child, XCB_ATOM_WM_CLASS, XCB_ATOM_STRING, 0, long_length);
-		xcb_get_property_reply_t* replyProp = xcb_get_property_reply(connection, cookieProp, NULL);
-		if (replyProp != NULL) {
-			auto len = xcb_get_property_value_length(replyProp);
-			// if len == long_length then that means we didn't read the whole property, so discard.
-			if (len > 0 && (uint32_t)len < long_length) {
-				char buffer[long_length] = { 0 };
-				memcpy(buffer, xcb_get_property_value(replyProp), len);
-				// first is instance name, then class name - both null terminated. we want class name.
-				const char* classname = buffer + strlen(buffer) + 1;
-				if (strcmp(classname, "RuneScape") == 0 || strcmp(classname, "steam_app_1343400") == 0) {
-					// Now, only take this if it's one of the deepest instances found so far
-					if (depth > *deepest) {
-						out->clear();
-						out->push_back(child);
-						*deepest = depth;
-					} else if (depth == *deepest) {
-						out->push_back(child);
-					}
-				}
+		if (IsRsWindow(child)) {
+			rsDepthMutex.lock();
+			// Only take this if it's one of the deepest instances found so far
+			if (depth > rsDepth) {
+				out->clear();
+				out->push_back(child);
+				rsDepth = depth;
+			} else if (depth == rsDepth) {
+				out->push_back(child);
 			}
+			rsDepthMutex.unlock();
 		}
-		free(replyProp);
-		GetRsHandlesRecursively(child, out, deepest, depth + 1);
+		
+		GetRsHandlesRecursively(child, out, depth + 1);
 	}
 
 	free(reply);
@@ -178,8 +191,7 @@ void GetRsHandlesRecursively(const xcb_window_t window, std::vector<OSWindow>* o
 std::vector<OSWindow> OSGetRsHandles() {
 	ensureConnection();
 	std::vector<OSWindow> out;
-	unsigned int deepest = 0;
-	GetRsHandlesRecursively(rootWindow, &out, &deepest);
+	GetRsHandlesRecursively(rootWindow, &out);
 	return out;
 }
 
@@ -235,7 +247,7 @@ void OSNewWindowListener(OSWindow window, WindowEventType type, Napi::Function c
 	eventMutex.lock();
 
 	// If this is a new window, request all its events from X server
-	if (std::find_if(trackedEvents.begin(), trackedEvents.end(), [window](TrackedEvent& e) {return e.window == window.handle;}) == trackedEvents.end()) {
+	if (window.handle != 0 && std::find_if(trackedEvents.begin(), trackedEvents.end(), [window](TrackedEvent& e) {return e.window == window.handle;}) == trackedEvents.end()) {
 		const uint32_t values[] = { XCB_EVENT_MASK_STRUCTURE_NOTIFY };
 		xcb_change_window_attributes(connection, window.handle, XCB_CW_EVENT_MASK, values);
 	}
@@ -268,7 +280,7 @@ void OSRemoveWindowListener(OSWindow window, WindowEventType type, Napi::Functio
 	);
 
 	// If there are no more tracked events for this window, request X server to stop sending any events about it
-	if (std::find_if(trackedEvents.begin(), trackedEvents.end(), [window](TrackedEvent& e) {return e.window == window.handle;}) == trackedEvents.end()) {
+	if (window.handle != 0 && std::find_if(trackedEvents.begin(), trackedEvents.end(), [window](TrackedEvent& e) {return e.window == window.handle;}) == trackedEvents.end()) {
 		const uint32_t values[] = { XCB_NONE };
 		xcb_change_window_attributes(connection, window.handle, XCB_CW_EVENT_MASK, values);
 	}
@@ -310,7 +322,42 @@ void StartWindowThread() {
 	windowThreadMutex.unlock();
 }
 
+// Should only be called from the window thread.
+// Called when a window's state has changed such that it may have become eligible for tracking.
+void HandleNewWindow(const xcb_window_t window, xcb_window_t parent) {
+	if (IsRsWindow(window)) {
+		size_t depth = 0;
+		while (parent != rootWindow) {
+			xcb_query_tree_cookie_t cookie = xcb_query_tree(connection, parent);
+			xcb_query_tree_reply_t* reply = xcb_query_tree_reply(connection, cookie, NULL);
+			if (reply == NULL) {
+				return;
+			}
+			parent = reply->parent;
+			depth += 1;
+		}
+		rsDepthMutex.lock();
+		if (depth >= rsDepth) {
+			rsDepth = depth;
+			eventMutex.lock();
+			for (auto ev = trackedEvents.begin(); ev != trackedEvents.end(); ev++) {
+				if (ev->type == WindowEventType::Show && ev->window == 0) {
+					ev->callback.BlockingCall([window](Napi::Env env, Napi::Function jsCallback) {
+						jsCallback.Call({Napi::BigInt::New(env, (uint64_t)window), Napi::Number::New(env, XCB_CREATE_NOTIFY)});
+					});
+				}
+			}
+			eventMutex.unlock();
+		}
+		rsDepthMutex.unlock();
+	}
+}
+
 void WindowThread() {
+	// Request substructure events for root window
+	const uint32_t rootValues[] = { XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY };
+    xcb_change_window_attributes(connection, rootWindow, XCB_CW_EVENT_MASK, rootValues);
+
 	xcb_generic_event_t* event;
 	while (WindowThreadShouldRun()) {
 		event = xcb_wait_for_event(connection);
@@ -337,7 +384,14 @@ void WindowThread() {
 					eventMutex.unlock();
 					break;
 				}
-				case XCB_CLIENT_MESSAGE: {
+				case XCB_CREATE_NOTIFY: {
+					xcb_create_notify_event_t* create = (xcb_create_notify_event_t*)event;
+					HandleNewWindow(create->window, create->parent);
+					break;
+				}
+				case XCB_REPARENT_NOTIFY: {
+					xcb_reparent_notify_event_t* reparent = (xcb_reparent_notify_event_t*)event;
+					HandleNewWindow(reparent->window, reparent->parent);
 					break;
 				}
 				case XCB_EXPOSE: {
