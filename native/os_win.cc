@@ -315,66 +315,68 @@ void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject
 
 	vector<Napi::Value> args;
 	switch (event) {
-	case EVENT_OBJECT_STATECHANGE:
-	case EVENT_OBJECT_DESTROY:
-		iterateHandlers(
-			[&](const TrackedEvent& h) {return hwnd == h.wnd.handle && h.type == WindowEventType::Close; },
-			[&](const TrackedEvent& h) {
-				auto env = h.callback.Env();
-				Napi::HandleScope scope(env);
-				//TODO more intelligent way to deal with js land callback errors?
-				try { h.callback.MakeCallback(env.Global(), {}); }
-				catch (...) {}
-			});
-		break;
-	case EVENT_SYSTEM_CAPTURESTART: {
-		auto windowhwnd = GetAncestor(hwnd, GA_ROOT);
-		iterateHandlers(
-			[&](const TrackedEvent& h) {return windowhwnd == h.wnd.handle && h.type == WindowEventType::Click; },
-			[&](const TrackedEvent& h) {
-				auto env = h.callback.Env();
-				Napi::HandleScope scope(env);
-				try { h.callback.MakeCallback(env.Global(), {}); }
-				catch (...) {}
-			});
-		break; }
-	case EVENT_SYSTEM_MOVESIZESTART:
-	case EVENT_SYSTEM_MOVESIZEEND:
-	case EVENT_OBJECT_LOCATIONCHANGE: {
-		JSRectangle bounds = wnd.GetBounds();
-		const char* phase = (event == EVENT_SYSTEM_MOVESIZEEND ? "end" : event == EVENT_SYSTEM_MOVESIZESTART ? "start" : "moving");
-		iterateHandlers(
-			[&](const TrackedEvent& h) {return hwnd == h.wnd.handle && h.type == WindowEventType::Move; },
-			[&](const TrackedEvent& h) {
-				auto env = h.callback.Env();
-				Napi::HandleScope scope(env);
-				try { h.callback.MakeCallback(env.Global(), { bounds.ToJs(env),Napi::String::New(env, phase) }); }
-				catch (...) {}
-			});
-		break; }
-	case EVENT_OBJECT_CREATE: {
-		if (hwnd != 0) {
-			wchar_t className[32];
-			char name[32];
-			if (!GetClassNameW(hwnd, className, 32)) {
-				if (WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)wname, -1, (LPSTR)&name, sizeof name, NULL, NULL) != 0) {
-					if (strcmp(name, "RuneScape") == 0) {
-						// The new object is in fact a RuneScape window
-						DWORD pid = 0;
-						GetWindowThreadProcessId(hwnd, &pid);
-						iterateHandlers(
-							[&](const TrackedEvent& h) {return (h.wnd.handle == 0 || hwnd == h.wnd.handle) && h.type == WindowEventType::Show; },
-							[&](const TrackedEvent& h) {
-								auto env = h.callback.Env();
-								Napi::HandleScope scope(env);
-								try { h.callback.MakeCallback(env.Global(), { Napi::BigInt::New(env,(uint64_t)hwnd),Napi::Number::New(env,event) }); }
-								catch (...) {}
-							});
-						break; }
+		case EVENT_OBJECT_STATECHANGE:
+		case EVENT_OBJECT_DESTROY:
+			iterateHandlers(
+				[&](const TrackedEvent& h) {return hwnd == h.wnd.handle && h.type == WindowEventType::Close; },
+				[&](const TrackedEvent& h) {
+					auto env = h.callback.Env();
+					Napi::HandleScope scope(env);
+					//TODO more intelligent way to deal with js land callback errors?
+					try { h.callback.MakeCallback(env.Global(), {}); }
+					catch (...) {}
+				});
+			break;
+		case EVENT_SYSTEM_CAPTURESTART: {
+			auto windowhwnd = GetAncestor(hwnd, GA_ROOT);
+			iterateHandlers(
+				[&](const TrackedEvent& h) {return windowhwnd == h.wnd.handle && h.type == WindowEventType::Click; },
+				[&](const TrackedEvent& h) {
+					auto env = h.callback.Env();
+					Napi::HandleScope scope(env);
+					try { h.callback.MakeCallback(env.Global(), {}); }
+					catch (...) {}
+				});
+			break;
+		}
+		case EVENT_SYSTEM_MOVESIZESTART:
+		case EVENT_SYSTEM_MOVESIZEEND:
+		case EVENT_OBJECT_LOCATIONCHANGE: {
+			JSRectangle bounds = wnd.GetBounds();
+			const char* phase = (event == EVENT_SYSTEM_MOVESIZEEND ? "end" : event == EVENT_SYSTEM_MOVESIZESTART ? "start" : "moving");
+			iterateHandlers(
+				[&](const TrackedEvent& h) {return hwnd == h.wnd.handle && h.type == WindowEventType::Move; },
+				[&](const TrackedEvent& h) {
+					auto env = h.callback.Env();
+					Napi::HandleScope scope(env);
+					try { h.callback.MakeCallback(env.Global(), { bounds.ToJs(env),Napi::String::New(env, phase) }); }
+					catch (...) {}
+				});
+			break;
+		}
+		case EVENT_OBJECT_CREATE: {
+			if (hwnd != 0) {
+				wchar_t wname[32];
+				char name[32];
+				if (GetClassNameW(hwnd, wname, 32) != 0) {
+					if (WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)wname, -1, (LPSTR)&name, sizeof name, NULL, NULL) != 0) {
+						if (strcmp(name, "JagWindow") == 0) {
+							// The new object is in fact a RuneScape window
+							DWORD pid = 0;
+							GetWindowThreadProcessId(hwnd, &pid);
+							iterateHandlers(
+								[&](const TrackedEvent& h) {return (h.wnd.handle == 0 || hwnd == h.wnd.handle) && h.type == WindowEventType::Show; },
+								[&](const TrackedEvent& h) {
+									auto env = h.callback.Env();
+									Napi::HandleScope scope(env);
+									try { h.callback.MakeCallback(env.Global(), { Napi::BigInt::New(env,(uint64_t)hwnd),Napi::Number::New(env,event) }); }
+									catch (...) {}
+								});
+						}
 					}
 				}
 			}
-			
+			break;
 		}
 	}
 }
