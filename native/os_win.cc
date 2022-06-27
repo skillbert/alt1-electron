@@ -280,7 +280,6 @@ void OSNewWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) 
 }
 
 void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) {
-	const TrackedEvent* ev = nullptr;
 	for (auto it = windowHandlers.begin(); it != windowHandlers.end(); it++) {
 		if (it->type == type && it->wnd == wnd && (*it->callback) == Napi::Persistent(cb)) {
 			windowHandlers.erase(it);
