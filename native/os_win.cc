@@ -294,10 +294,11 @@ void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function c
 template<typename F,typename COND>
 void iterateHandlers(COND cond, F tracker) {
 	// This will only call the first 64 matching events in the window handlers list. Probably enough.
-	std::shared_ptr<Napi::FunctionReference> callbacks[64];
+	constexpr size_t max_callbacks = 64;
+	std::shared_ptr<Napi::FunctionReference> callbacks[max_callbacks];
 	size_t count = 0;
 	for (auto it = windowHandlers.begin(); it != windowHandlers.end(); it++) {
-		if (cond(*it) && count < 64) {
+		if (cond(*it) && count < max_callbacks) {
 			callbacks[count] = it->callback;
 			count += 1;
 		}
@@ -352,9 +353,10 @@ void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject
 		}
 		case EVENT_OBJECT_CREATE: {
 			if (hwnd != 0) {
-				wchar_t wname[32];
-				char name[32];
-				if (GetClassNameW(hwnd, wname, 32) != 0) {
+				constexpr size_t name_len = 32;
+				wchar_t wname[name_len];
+				char name[name_len];
+				if (GetClassNameW(hwnd, wname, name_len) != 0) {
 					if (WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)wname, -1, (LPSTR)&name, sizeof name, NULL, NULL) != 0) {
 						if (strcmp(name, "JagWindow") == 0) {
 							// The new object is in fact a RuneScape window

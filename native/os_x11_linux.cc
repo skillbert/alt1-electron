@@ -137,7 +137,7 @@ OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
 }
 
 bool IsRsWindow(const xcb_window_t window) {
-	const uint32_t long_length = 64; // Any length higher than 2x+3 of the longest string we may match is fine
+	constexpr uint32_t long_length = 64; // Any length higher than 2x+3 of the longest string we may match is fine
 	// Check window class (WM_CLASS property); this is set by the application controlling the window
 	// Also check WM_TRANSIENT_FOR is not set, this will be set on things like popups
 	xcb_get_property_cookie_t cookieProp = xcb_get_property(connection, 0, window, XCB_ATOM_WM_CLASS, XCB_ATOM_STRING, 0, long_length);
@@ -288,7 +288,7 @@ void OSNewWindowListener(OSWindow window, WindowEventType type, Napi::Function c
 
 	// If this is a new window, request all its events from X server
 	if (window.handle != 0 && std::find_if(trackedEvents.begin(), trackedEvents.end(), [window](TrackedEvent& e) {return e.window == window.handle;}) == trackedEvents.end()) {
-		const uint32_t values[] = { XCB_EVENT_MASK_STRUCTURE_NOTIFY };
+		constexpr uint32_t values[] = { XCB_EVENT_MASK_STRUCTURE_NOTIFY };
 		xcb_change_window_attributes(connection, window.handle, XCB_CW_EVENT_MASK, values);
 	}
 
@@ -322,7 +322,7 @@ void OSRemoveWindowListener(OSWindow window, WindowEventType type, Napi::Functio
 	// If there are no more tracked events for this window, request X server to stop sending any events about it
 	// TODO: this spawns an XCB_WINDOW error if the window doesn't exist
 	if (window.handle != 0 && std::find_if(trackedEvents.begin(), trackedEvents.end(), [window](TrackedEvent& e) {return e.window == window.handle;}) == trackedEvents.end()) {
-		const uint32_t values[] = { XCB_NONE };
+		constexpr uint32_t values[] = { XCB_NONE };
 		xcb_change_window_attributes(connection, window.handle, XCB_CW_EVENT_MASK, values);
 	}
 	bool wait = trackedEvents.size() == 0;
@@ -356,7 +356,7 @@ void StartWindowThread() {
 
 		windowThreadId = xcb_generate_id(connection);
 		std::cout << "native: starting window thread: id " << windowThreadId << std::endl;
-		const uint32_t values[] = { XCB_EVENT_MASK_EXPOSURE };
+		constexpr uint32_t values[] = { XCB_EVENT_MASK_EXPOSURE };
 		xcb_create_window(connection, XCB_COPY_FROM_PARENT, windowThreadId, rootWindow, 0, 0, 1, 1, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_EVENT_MASK, values);
 		xcb_flush(connection);
 	}
@@ -403,7 +403,7 @@ void HandleNewWindow(const xcb_window_t window, xcb_window_t parent) {
 
 void WindowThread() {
 	// Request substructure events for root window
-	const uint32_t rootValues[] = { XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY };
+	constexpr uint32_t rootValues[] = { XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY };
     xcb_change_window_attributes(connection, rootWindow, XCB_CW_EVENT_MASK, rootValues);
 
 	xcb_generic_event_t* event;
