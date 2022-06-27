@@ -429,7 +429,6 @@ void WindowThread() {
 				}
 				case XCB_CREATE_NOTIFY: {
 					xcb_create_notify_event_t* create = (xcb_create_notify_event_t*)event;
-					std::cout << "native: create id " << create->window << " override redirect " << (int)create->override_redirect << std::endl;
 					if (!create->override_redirect) {
 						HandleNewWindow(create->window, create->parent);
 					}
@@ -446,7 +445,6 @@ void WindowThread() {
 				}
 				case XCB_REPARENT_NOTIFY: {
 					xcb_reparent_notify_event_t* reparent = (xcb_reparent_notify_event_t*)event;
-					std::cout << "native: reparent id " << reparent->window << " override redirect " << (int)reparent->override_redirect << std::endl;
 					if(!reparent->override_redirect) {
 						HandleNewWindow(reparent->window, reparent->parent);
 					}
