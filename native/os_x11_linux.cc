@@ -357,6 +357,7 @@ void HandleNewWindow(const xcb_window_t window, xcb_window_t parent) {
 			}
 			parent = reply->parent;
 			depth += 1;
+			free(reply);
 		}
 		rsDepthMutex.lock();
 		if (depth >= rsDepth) {
