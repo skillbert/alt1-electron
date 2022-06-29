@@ -64,7 +64,6 @@ export class OSWindow {
 	getTitle() { return native.getWindowTitle(this.handle); }
 	getBounds() { return native.getWindowBounds(this.handle); }
 	getClientBounds() { return native.getClientBounds(this.handle); }
-	//setBounds(x: number, y: number, w: number, h: number) { return native.setWindowBounds(this.handle, x, y, w, h); }
 	setParent(parent: OSWindow | null) { return native.setWindowParent(this.handle, parent ? parent.handle : BigInt(0)) }
 
 	on<T extends keyof windowEvents>(type: T, cb: windowEvents[T]) {
@@ -160,7 +159,6 @@ export class OSWindowPin extends TypedEmitter<OSWindowPinEvents>{
 			parentbounds = parentbounds || this.parent.getBounds();
 			let x = (this.pinhor == "left" ? parentbounds.x + this.wndhordist : parentbounds.x + parentbounds.width - this.wndhordist - this.wndwidth);
 			let y = (this.pinver == "top" ? parentbounds.y + this.wndverdist : parentbounds.y + parentbounds.height - this.wndverdist - this.wndheight);
-			console.log("Setting xywh to " + x + "," + y + " " + this.wndwidth + "," + this.wndheight);
 			this.window.setBounds({x: x, y: y, width: this.wndwidth, height: this.wndheight});
 		}
 		if (this.dockmode == "cover") {
