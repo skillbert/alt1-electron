@@ -104,7 +104,7 @@ class ManagedWindow {
 			height: posrect.height,
 			transparent: true,
 			fullscreenable: false,
-			resizable: false,  // Disables CSS resizing - we do JS-based resizing for now
+			resizable: true,
 			skipTaskbar: true,
 			minimizable: false,
 			maximizable: false,
