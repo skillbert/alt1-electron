@@ -39,26 +39,6 @@ std::mutex rsDepthMutex; // Locks the rsDepth variable
 void WindowThread();
 void StartWindowThread();
 
-void OSWindow::SetBounds(JSRectangle bounds) {
-	ensureConnection();
-	if (bounds.width > 0 && bounds.height > 0) {
-		int32_t config[] = {
-			bounds.x,
-			bounds.y,
-			bounds.width,
-			bounds.height,
-		};
-		xcb_configure_window(connection, this->handle, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, &config);
-	} else {
-		int32_t config[] = {
-			bounds.x,
-			bounds.y,
-		};
-		xcb_configure_window(connection, this->handle, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, &config);
-	}
-	xcb_flush(connection);
-}
-
 JSRectangle OSWindow::GetBounds() {
 	return GetClientBounds();
 }

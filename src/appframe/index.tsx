@@ -136,7 +136,7 @@ function borderDrag(ver: "top" | "bot" | "", hor: "left" | "right" | "") {
 
 function startDrag(factors: { x: number, y: number, w: number, h: number }) {
 	return function startDrag(starte: React.MouseEvent) {
-		let initial = thiswindow.nativeWindow.getBounds();
+		let initial = thiswindow.window.getBounds();
 		starte.preventDefault();
 		starte.stopPropagation();
 		appview!.style.pointerEvents = "none";
@@ -145,7 +145,12 @@ function startDrag(factors: { x: number, y: number, w: number, h: number }) {
 			let pos = remote.screen.getCursorScreenPoint();
 			let dx = pos.x - startpos.x;
 			let dy = pos.y - startpos.y;
-			thiswindow.nativeWindow.setBounds(initial.x + dx * factors.x, initial.y + dy * factors.y, initial.width + dx * factors.w, initial.height + dy * factors.h);
+			thiswindow.window.setBounds({
+				x: initial.x + dx * factors.x,
+				y:initial.y + dy * factors.y,
+				width: initial.width + dx * factors.w,
+				height: initial.height + dy * factors.h,
+			});
 			thiswindow.windowPin.updateDocking();
 		};
 		let cleanup = () => {

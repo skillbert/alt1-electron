@@ -1,5 +1,6 @@
 import * as path from "path";
 import * as fs from "fs";
+import { BrowserWindow } from "electron";
 import { Rectangle } from "./shared";
 import { boundMethod } from "autobind-decorator";
 import { TypedEmitter } from "./typedemitter";
@@ -14,7 +15,6 @@ export var native: {
 	getWindowBounds: (wnd: BigInt) => Rectangle,
 	getClientBounds: (wnd: BigInt) => Rectangle,
 	getWindowTitle: (wnd: BigInt) => string,
-	setWindowBounds: (wnd: BigInt, x: number, y: number, w: number, h: number) => void,
 	setWindowParent: (wnd: BigInt, parent: BigInt) => void,
 
 	newWindowListener: <T extends keyof windowEvents>(wnd: BigInt, type: T, cb: windowEvents[T]) => void,
@@ -64,7 +64,7 @@ export class OSWindow {
 	getTitle() { return native.getWindowTitle(this.handle); }
 	getBounds() { return native.getWindowBounds(this.handle); }
 	getClientBounds() { return native.getClientBounds(this.handle); }
-	setBounds(x: number, y: number, w: number, h: number) { return native.setWindowBounds(this.handle, x, y, w, h); }
+	//setBounds(x: number, y: number, w: number, h: number) { return native.setWindowBounds(this.handle, x, y, w, h); }
 	setParent(parent: OSWindow | null) { return native.setWindowParent(this.handle, parent ? parent.handle : BigInt(0)) }
 
 	on<T extends keyof windowEvents>(type: T, cb: windowEvents[T]) {
@@ -86,7 +86,8 @@ type OSWindowPinEvents = {
 };
 
 export class OSWindowPin extends TypedEmitter<OSWindowPinEvents>{
-	window: OSWindow;
+	window: BrowserWindow;
+	oswindow: OSWindow;
 	parent: OSWindow;
 	pinhor: "left" | "right";
 	pinver: "top" | "bot";
@@ -95,7 +96,7 @@ export class OSWindowPin extends TypedEmitter<OSWindowPinEvents>{
 	wndwidth = 0;
 	wndheight = 0;
 	dockmode: "cover" | "auto";
-	constructor(window: OSWindow, parent: OSWindow, dockmode: "cover" | "auto") {
+	constructor(window: BrowserWindow, parent: OSWindow, dockmode: "cover" | "auto") {
 		super();
 		this.window = window;
 		this.parent = parent;
@@ -103,7 +104,8 @@ export class OSWindowPin extends TypedEmitter<OSWindowPinEvents>{
 		this.pinhor = "left";
 		this.pinver = "top";
 		this.updateDocking();
-		native.setWindowParent(window.handle, parent.handle);
+		this.oswindow = new OSWindow(window.getNativeWindowHandle());
+		native.setWindowParent(this.oswindow.handle, parent.handle);
 		this.parent.on("move", this.onmove);
 		this.parent.on("close", this.onclose);
 	}
@@ -131,7 +133,7 @@ export class OSWindowPin extends TypedEmitter<OSWindowPinEvents>{
 		return r;
 	}
 	unpin() {
-		native.setWindowParent(this.window.handle, BigInt(0));
+		native.setWindowParent(this.oswindow.handle, BigInt(0));
 		this.parent.removeListener("move", this.onmove);
 		this.parent.removeListener("close", this.onclose);
 		this.emit("unpin");
@@ -158,11 +160,12 @@ export class OSWindowPin extends TypedEmitter<OSWindowPinEvents>{
 			parentbounds = parentbounds || this.parent.getBounds();
 			let x = (this.pinhor == "left" ? parentbounds.x + this.wndhordist : parentbounds.x + parentbounds.width - this.wndhordist - this.wndwidth);
 			let y = (this.pinver == "top" ? parentbounds.y + this.wndverdist : parentbounds.y + parentbounds.height - this.wndverdist - this.wndheight);
-			this.window.setBounds(x, y, this.wndwidth, this.wndheight);
+			console.log("Setting xywh to " + x + "," + y + " " + this.wndwidth + "," + this.wndheight);
+			this.window.setBounds({x: x, y: y, width: this.wndwidth, height: this.wndheight});
 		}
 		if (this.dockmode == "cover") {
 			let bounds = this.parent.getClientBounds();
-			this.window.setBounds(bounds.x, bounds.y, bounds.width, bounds.height);
+			this.window.setBounds({x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height});
 		}
 	}
 	@boundMethod

@@ -116,7 +116,7 @@ class ManagedWindow {
 		this.rsClient = rsclient;
 		this.appConfig = app;
 
-		this.windowPin = new OSWindowPin(this.nativeWindow, this.rsClient.window, "auto");
+		this.windowPin = new OSWindowPin(this.window, this.rsClient.window, "auto");
 		this.windowPin.once("close", () => {
 			this.window.close();
 			app.wasOpen = true;

@@ -111,7 +111,7 @@ class ActiveRightclick {
 
 export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 	window: OSWindow;
-	overlayWindow: { browser: BrowserWindow, nativewnd: OSWindow, pin: OSWindowPin | null, stalledOverlay: { frameid: number, cmd: OverlayCommand[] }[] } | null;
+	overlayWindow: { browser: BrowserWindow, pin: OSWindowPin | null, stalledOverlay: { frameid: number, cmd: OverlayCommand[] }[] } | null;
 	activeRightclick: ActiveRightclick | null = null;
 	isActive = false;
 	lastBlurTime = 0;
@@ -266,8 +266,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 				focusable: false
 			});
 
-			let nativewnd = new OSWindow(browser.getNativeWindowHandle());
-			let pin: OSWindowPin = new OSWindowPin(nativewnd, this.window, "cover");
+			let pin: OSWindowPin = new OSWindowPin(browser, this.window, "cover");
 			browser.loadFile(path.resolve(__dirname, "overlayframe/index.html"));
 			browser.on("closed", e => {
 				pin.unpin();
@@ -283,7 +282,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 				}
 			});
 			browser.setIgnoreMouseEvents(true);
-			this.overlayWindow = { browser, nativewnd, pin, stalledOverlay: [{ frameid: frameid, cmd: commands }] };
+			this.overlayWindow = { browser, pin, stalledOverlay: [{ frameid: frameid, cmd: commands }] };
 		} else {
 			this.overlayWindow.browser.webContents.send("overlay", frameid, commands);
 		}

@@ -30,7 +30,6 @@ struct OSWindow {
 public:
 	OSWindow() = default;
 	OSWindow(OSRawWindow hnd) : handle(hnd) {}
-	void SetBounds(JSRectangle bounds);
 	JSRectangle GetBounds();
 	JSRectangle GetClientBounds();
 	bool IsValid();

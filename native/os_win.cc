@@ -12,10 +12,6 @@ OSWindow OSGetActiveWindow() {
 	return OSWindow(GetForegroundWindow());
 }
 
-void OSWindow::SetBounds(JSRectangle bounds) {
-	SetWindowPos(this->handle, NULL, bounds.x, bounds.y, bounds.width, bounds.height, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-}
-
 Napi::Value OSWindow::ToJS(Napi::Env env) {
 	return Napi::BigInt::New(env, (uint64_t)this->handle);
 }
