@@ -376,7 +376,6 @@ TrackedEvent::TrackedEvent(OSWindow wnd, WindowEventType type, Napi::Function cb
 	this->wnd = wnd;
 	this->type = type;
 	this->callback = std::make_shared<Napi::FunctionReference>(Napi::Persistent(cb));
-	this->callback->SuppressDestruct();
 	DWORD pid;
 	//TODO error handling
 	GetWindowThreadProcessId(wnd.handle, &pid);
