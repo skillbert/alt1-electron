@@ -96,6 +96,22 @@ void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
 	SetWindowLongPtr(wnd.handle, GWLP_HWNDPARENT, (uint64_t)parent.handle);
 }
 
+bool IsRsWindow(HWND hwnd) {
+	if (hwnd != 0) {
+		constexpr size_t name_len = 32;
+		wchar_t wname[name_len];
+		char name[name_len];
+		if (GetClassNameW(hwnd, wname, name_len) != 0) {
+			if (WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)wname, -1, (LPSTR)&name, sizeof name, NULL, NULL) != 0) {
+				if (strcmp(name, "JagWindow") == 0) {
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
 std::vector<OSWindow> OSGetRsHandles() {
 	std::vector<OSWindow> out;
 	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -105,11 +121,11 @@ std::vector<OSWindow> OSGetRsHandles() {
 	//Walk through all processes
 	if (Process32First(snapshot, &process)) {
 		do {
-			if (std::string(process.szExeFile) == "rs2client.exe") {
-				WinFindMainWindow_data data;
-				data.process_id = process.th32ProcessID;
-				data.window_handle = 0;
-				EnumWindows(WinFindMainWindow_callback, (LPARAM)&data);
+			WinFindMainWindow_data data;
+			data.process_id = process.th32ProcessID;
+			data.window_handle = 0;
+			EnumWindows(WinFindMainWindow_callback, (LPARAM)&data);
+			if (IsRsWindow(data.window_handle)) {
 				out.push_back(OSWindow(data.window_handle));
 			}
 		} while (Process32Next(snapshot, &process));
@@ -347,25 +363,15 @@ void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject
 			break;
 		}
 		case EVENT_OBJECT_CREATE: {
-			if (hwnd != 0) {
-				constexpr size_t name_len = 32;
-				wchar_t wname[name_len];
-				char name[name_len];
-				if (GetClassNameW(hwnd, wname, name_len) != 0) {
-					if (WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)wname, -1, (LPSTR)&name, sizeof name, NULL, NULL) != 0) {
-						if (strcmp(name, "JagWindow") == 0) {
-							// The new object is in fact a RuneScape window
-							iterateHandlers(
-								[hwnd](const TrackedEvent& h) {return (h.wnd.handle == 0 || hwnd == h.wnd.handle) && h.type == WindowEventType::Show; },
-								[hwnd, event](const std::shared_ptr<Napi::FunctionReference>& h) {
-									auto env = h->Env();
-									Napi::HandleScope scope(env);
-									try { h->MakeCallback(env.Global(), { Napi::BigInt::New(env,(uint64_t)hwnd),Napi::Number::New(env,event) }); }
-									catch (...) {}
-								});
-						}
-					}
-				}
+			if (IsRsWindow(hwnd)) {
+				iterateHandlers(
+					[hwnd](const TrackedEvent& h) {return (h.wnd.handle == 0 || hwnd == h.wnd.handle) && h.type == WindowEventType::Show; },
+					[hwnd, event](const std::shared_ptr<Napi::FunctionReference>& h) {
+						auto env = h->Env();
+						Napi::HandleScope scope(env);
+						try { h->MakeCallback(env.Global(), { Napi::BigInt::New(env,(uint64_t)hwnd),Napi::Number::New(env,event) }); }
+						catch (...) {}
+					});
 			}
 			break;
 		}
