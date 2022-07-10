@@ -38,7 +38,7 @@ struct JSRectangle {
 	int height;
 	JSRectangle() = default;
 	JSRectangle(int x, int y, int w, int h) :x(x), y(y), width(w), height(h) {}
-	Napi::Object ToJs(Napi::Env env) {
+	Napi::Object ToJs(Napi::Env env) const {
 		auto ret = Napi::Object::New(env);
 		ret.Set("x", x);
 		ret.Set("y", y);

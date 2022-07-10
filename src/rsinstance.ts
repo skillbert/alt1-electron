@@ -15,19 +15,31 @@ import RightClickReader from "./readers/rightclick";
 
 export var rsInstances: RsInstance[] = [];
 
+const newRsWindow = (handle) => new RsInstance(new OSWindow(handle));
+
 export function initRsInstanceTracking() {
 	detectInstances();
-	// I don't think we need to do any tracking as long as detectInstances() is called appropriately
+	OSNullWindow.on("show", newRsWindow);
 };
 
-export function detectInstances() {
-	let hwnds = native.getRsHandles();
+export function stopRsInstanceTracking() {
+	OSNullWindow.removeListener("show", newRsWindow);
+}
 
-	// Remove any currently-tracked instances that were not detected this time
-	rsInstances = rsInstances.filter((x) => hwnds.includes(x.window.handle));
+export function detectInstances() {
+	let handles = native.getRsHandles();
+
+	// Make a list of currently-tracked instances that were not detected this time, for removal
+	// Note: this variable is not inlined because iterating a list while modifying it would not behave as expected
+	const removedInstances = rsInstances.filter((x) => !handles.includes(x.window.handle));
+
+	// Close and remove each one
+	for (const instance of removedInstances) {
+		instance.close();
+	}
 
 	// Add any new ones
-	hwnds.filter((x) => !rsInstances.map((x) => x.window.handle).includes(x)).map((x) => new RsInstance(new OSWindow(x)));
+	handles.filter((x) => !rsInstances.map((x) => x.window.handle).includes(x)).map((x) => new RsInstance(new OSWindow(x)));
 }
 
 export function getRsInstanceFromWnd(wnd: OSWindow) {
@@ -99,7 +111,7 @@ class ActiveRightclick {
 
 export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 	window: OSWindow;
-	overlayWindow: { browser: BrowserWindow, nativewnd: OSWindow, pin: OSWindowPin, stalledOverlay: { frameid: number, cmd: OverlayCommand[] }[] } | null;
+	overlayWindow: { browser: BrowserWindow, pin: OSWindowPin | null, stalledOverlay: { frameid: number, cmd: OverlayCommand[] }[] } | null;
 	activeRightclick: ActiveRightclick | null = null;
 	isActive = false;
 	lastBlurTime = 0;
@@ -126,6 +138,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 	close() {
 		rsInstances.splice(rsInstances.indexOf(this), 1);
 		this.window.removeListener("close", this.close);
+		this.window.removeListener("click", this.clientClicked);
 		this.emit("close");
 		console.log(`stopped tracking rs client with handle: ${this.window.handle}`);
 	}
@@ -253,9 +266,13 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 				focusable: false
 			});
 
-			let nativewnd = new OSWindow(browser.getNativeWindowHandle());
-			let pin = new OSWindowPin(nativewnd, this.window, "cover");
+			let pin: OSWindowPin = new OSWindowPin(browser, this.window, "cover");
 			browser.loadFile(path.resolve(__dirname, "overlayframe/index.html"));
+			browser.on("closed", e => {
+				pin.unpin();
+				this.overlayWindow = null;
+				console.log("overlay closed");
+			});
 			browser.once("ready-to-show", () => {
 				browser.show();
 			});
@@ -264,12 +281,8 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 					browser.webContents.send("overlay", stalled.frameid, stalled.cmd);
 				}
 			});
-			browser.on("closed", e => {
-				this.overlayWindow = null;
-				console.log("overlay closed");
-			});
 			browser.setIgnoreMouseEvents(true);
-			this.overlayWindow = { browser, nativewnd, pin, stalledOverlay: [{ frameid: frameid, cmd: commands }] };
+			this.overlayWindow = { browser, pin, stalledOverlay: [{ frameid: frameid, cmd: commands }] };
 		} else {
 			this.overlayWindow.browser.webContents.send("overlay", frameid, commands);
 		}

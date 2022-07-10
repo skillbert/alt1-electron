@@ -4,20 +4,6 @@
 #include "os.h"
 #include "libproc.h"
 
-void OSWindow::SetBounds(JSRectangle bounds) {
-	assert(bounds.width > 0);
-	assert(bounds.height > 0);
-	
-	NSWindow* window = [this->hwnd.wnd window];
-	if (window == NULL) {
-		return;
-	}
-	
-	int y = [[NSScreen mainScreen] frame].size.height - bounds.y - bounds.height;
-	NSRect rect = NSMakeRect(bounds.x, y, bounds.width, bounds.height);
-	[window setFrame:rect display:YES];
-}
-
 JSRectangle OSWindow::GetBounds() {
 	NSWindow* window = [this->hwnd.wnd window];
 	NSRect frame = [window frame];

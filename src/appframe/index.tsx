@@ -101,7 +101,7 @@ function AppFrame(p: {}) {
 				<div className="button" onClick={e => close()} />
 				<div className="button" onClick={e => setMinimized(!minimized)} />
 				<div className="button" onClick={toggleDevTools} onContextMenu={e => e.preventDefault()} />
-				<div className="dragbutton" onMouseDown={startDrag({ x: 1, y: 1, w: 0, h: 0 })} />
+				<div className="dragbutton" />
 			</div>
 		</div>
 	);
@@ -121,22 +121,12 @@ function toggleDevTools(e: React.MouseEvent) {
 }
 
 function BorderEl(p: { ver: "top" | "bot" | "", hor: "left" | "right" | "" }) {
-	return <div className={classnames("border", "border-" + p.ver + p.hor)} onMouseDown={borderDrag(p.ver, p.hor)}></div>
-}
-
-function borderDrag(ver: "top" | "bot" | "", hor: "left" | "right" | "") {
-	let factors = {
-		x: (hor == "left" ? 1 : 0),
-		y: (ver == "top" ? 1 : 0),
-		w: (hor == "right" ? 1 : hor == "left" ? -1 : 0),
-		h: (ver == "bot" ? 1 : ver == "top" ? -1 : 0)
-	};
-	return startDrag(factors);
+	return <div className={"border"}></div>
 }
 
 function startDrag(factors: { x: number, y: number, w: number, h: number }) {
 	return function startDrag(starte: React.MouseEvent) {
-		let initial = thiswindow.nativeWindow.getBounds();
+		let initial = thiswindow.window.getBounds();
 		starte.preventDefault();
 		starte.stopPropagation();
 		appview!.style.pointerEvents = "none";
@@ -145,7 +135,12 @@ function startDrag(factors: { x: number, y: number, w: number, h: number }) {
 			let pos = remote.screen.getCursorScreenPoint();
 			let dx = pos.x - startpos.x;
 			let dy = pos.y - startpos.y;
-			thiswindow.nativeWindow.setBounds(initial.x + dx * factors.x, initial.y + dy * factors.y, initial.width + dx * factors.w, initial.height + dy * factors.h);
+			thiswindow.window.setBounds({
+				x: initial.x + dx * factors.x,
+				y:initial.y + dy * factors.y,
+				width: initial.width + dx * factors.w,
+				height: initial.height + dy * factors.h,
+			});
 			thiswindow.windowPin.updateDocking();
 		};
 		let cleanup = () => {
@@ -160,8 +155,7 @@ function startDrag(factors: { x: number, y: number, w: number, h: number }) {
 function clickThroughEffect(minimized: boolean, rc: RectLike, rootref: React.MutableRefObject<any>) {
 	let root = rootref.current as HTMLElement;
 	if (minimized || rc) {
-		//mouse move event forwarding is only supported on windows
-		if (process.platform == "win32") {
+		if (process.platform != "linux") {
 			//TODO check if this actually works when element is hidden while being hovered
 			let currenthover = root.matches(":hover");
 			thiswindow.window.setIgnoreMouseEvents(!currenthover, { forward: true });
@@ -174,31 +168,10 @@ function clickThroughEffect(minimized: boolean, rc: RectLike, rootref: React.Mut
 				root.removeEventListener("mouseenter", handler);
 				root.removeEventListener("mouseleave", handler);
 			}
+		} else {
+			// TODO: click-through on Linux using Shape API
+			thiswindow.window.setIgnoreMouseEvents(false);
 		}
-
-		//fall back to polling approach
-		let clickableels: DOMRect[] = [];
-		if (minimized) {
-			clickableels = [...document.querySelectorAll(".button,.dragbutton") as any as HTMLElement[]].map(e => e.getBoundingClientRect());
-		}
-		let checkmouse = () => {
-			let mousescreen = remote.screen.getCursorScreenPoint();
-			let client = thiswindow.nativeWindow.getClientBounds();
-			//TODO scaling/zoom
-			let mx = mousescreen.x - client.x;
-			let my = mousescreen.y - client.y;
-			let ignore = false;
-			if (minimized) {
-				ignore = !clickableels.some(e => mx >= e.left && mx < e.right && my >= e.top && my < e.bottom);
-			}
-			if (rc && mx >= rc.x && my < rc.x + rc.width && my >= rc.y && my < rc.y + rc.height) {
-				ignore = true;
-			}
-			thiswindow.window.setIgnoreMouseEvents(ignore);
-		};
-		checkmouse();
-		let timer = setInterval(checkmouse, 100);
-		return () => clearInterval(timer);
 	}
 	thiswindow.window.setIgnoreMouseEvents(false);
 }

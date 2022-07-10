@@ -1,6 +1,7 @@
 
 #include "os.h"
 #include <TlHelp32.h>
+#include <memory>
 #include "../libs/Alt1Native.h"
 
 /*
@@ -9,10 +10,6 @@
 
 OSWindow OSGetActiveWindow() {
 	return OSWindow(GetForegroundWindow());
-}
-
-void OSWindow::SetBounds(JSRectangle bounds) {
-	SetWindowPos(this->handle, NULL, bounds.x, bounds.y, bounds.width, bounds.height, SWP_ASYNCWINDOWPOS | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
 }
 
 Napi::Value OSWindow::ToJS(Napi::Env env) {
@@ -99,6 +96,22 @@ void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
 	SetWindowLongPtr(wnd.handle, GWLP_HWNDPARENT, (uint64_t)parent.handle);
 }
 
+bool IsRsWindow(HWND hwnd) {
+	if (hwnd != 0) {
+		constexpr size_t name_len = 32;
+		wchar_t wname[name_len];
+		char name[name_len];
+		if (GetClassNameW(hwnd, wname, name_len) != 0) {
+			if (WideCharToMultiByte(CP_UTF8, 0, (LPCWSTR)wname, -1, (LPSTR)&name, sizeof name, NULL, NULL) != 0) {
+				if (strcmp(name, "JagWindow") == 0) {
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
 std::vector<OSWindow> OSGetRsHandles() {
 	std::vector<OSWindow> out;
 	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -108,11 +121,11 @@ std::vector<OSWindow> OSGetRsHandles() {
 	//Walk through all processes
 	if (Process32First(snapshot, &process)) {
 		do {
-			if (std::string(process.szExeFile) == "rs2client.exe") {
-				WinFindMainWindow_data data;
-				data.process_id = process.th32ProcessID;
-				data.window_handle = 0;
-				EnumWindows(WinFindMainWindow_callback, (LPARAM)&data);
+			WinFindMainWindow_data data;
+			data.process_id = process.th32ProcessID;
+			data.window_handle = 0;
+			EnumWindows(WinFindMainWindow_callback, (LPARAM)&data);
+			if (IsRsWindow(data.window_handle)) {
 				out.push_back(OSWindow(data.window_handle));
 			}
 		} while (Process32Next(snapshot, &process));
@@ -240,7 +253,7 @@ struct TrackedEvent {
 	OSWindow wnd;
 	WindowEventType type;
 	int lastCalledId = 0;//used to determine if this callback was called already
-	Napi::FunctionReference callback;
+	std::shared_ptr<Napi::FunctionReference> callback;
 	std::vector<std::shared_ptr<WindowsEventHook>> hooks;
 	TrackedEvent(OSWindow wnd, WindowEventType type, Napi::Function cb);
 	//allow move assign
@@ -279,35 +292,31 @@ void OSNewWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) 
 }
 
 void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) {
-	const TrackedEvent* ev = nullptr;
 	for (auto it = windowHandlers.begin(); it != windowHandlers.end(); it++) {
-		if (it->type == type && it->wnd == wnd && it->callback == Napi::Persistent(cb)) {
+		if (it->type == type && it->wnd == wnd && (*it->callback) == Napi::Persistent(cb)) {
 			windowHandlers.erase(it);
 			break;
 		}
 	}
 }
 
-//used to determine which callbacks we called already
-int hookprocCount = 0;
-
 //need this weird function to deal with the possibility of the list being modified from the js callback
 //return true from cond if the handler matches and should be called
 template<typename F,typename COND>
 void iterateHandlers(COND cond, F tracker) {
-	hookprocCount++;
-	bool changed;
-	do {
-		changed = false;
-		for (auto it = windowHandlers.begin(); it != windowHandlers.end(); it++) {
-			if (it->lastCalledId != hookprocCount && cond(*it)) {
-				it->lastCalledId = hookprocCount;
-				changed = true;
-				tracker(*it);
-				break;
-			}
+	// This will only call the first 64 matching events in the window handlers list. Probably enough.
+	constexpr size_t max_callbacks = 64;
+	std::shared_ptr<Napi::FunctionReference> callbacks[max_callbacks];
+	size_t count = 0;
+	for (auto it = windowHandlers.begin(); it != windowHandlers.end(); it++) {
+		if (cond(*it) && count < max_callbacks) {
+			callbacks[count] = it->callback;
+			count += 1;
 		}
-	} while (changed);
+	}
+	for (size_t i = 0; i < count; i += 1) {
+		tracker(callbacks[i]);
+	}
 }
 
 void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD idEventThread, DWORD dwmsEventTime) {
@@ -315,63 +324,64 @@ void HookProc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject
 
 	vector<Napi::Value> args;
 	switch (event) {
-	case EVENT_OBJECT_STATECHANGE:
-	case EVENT_OBJECT_DESTROY:
-		iterateHandlers(
-			[&](const TrackedEvent& h) {return hwnd == h.wnd.handle && h.type == WindowEventType::Close; },
-			[&](const TrackedEvent& h) {
-				auto env = h.callback.Env();
-				Napi::HandleScope scope(env);
-				//TODO more intelligent way to deal with js land callback errors?
-				try { h.callback.MakeCallback(env.Global(), {}); }
-				catch (...) {}
-			});
-		break;
-	case EVENT_SYSTEM_CAPTURESTART: {
-		auto windowhwnd = GetAncestor(hwnd, GA_ROOT);
-		iterateHandlers(
-			[&](const TrackedEvent& h) {return windowhwnd == h.wnd.handle && h.type == WindowEventType::Click; },
-			[&](const TrackedEvent& h) {
-				auto env = h.callback.Env();
-				Napi::HandleScope scope(env);
-				try { h.callback.MakeCallback(env.Global(), {}); }
-				catch (...) {}
-			});
-		break; }
-	case EVENT_SYSTEM_MOVESIZESTART:
-	case EVENT_SYSTEM_MOVESIZEEND:
-	case EVENT_OBJECT_LOCATIONCHANGE: {
-		JSRectangle bounds = wnd.GetBounds();
-		const char* phase = (event == EVENT_SYSTEM_MOVESIZEEND ? "end" : event == EVENT_SYSTEM_MOVESIZESTART ? "start" : "moving");
-		iterateHandlers(
-			[&](const TrackedEvent& h) {return hwnd == h.wnd.handle && h.type == WindowEventType::Move; },
-			[&](const TrackedEvent& h) {
-				auto env = h.callback.Env();
-				Napi::HandleScope scope(env);
-				try { h.callback.MakeCallback(env.Global(), { bounds.ToJs(env),Napi::String::New(env, phase) }); }
-				catch (...) {}
-			});
-		break; }
-	case EVENT_OBJECT_UNCLOAKED:
-	case EVENT_SYSTEM_FOREGROUND:
-	case EVENT_OBJECT_SHOW: {
-		iterateHandlers(
-			[&](const TrackedEvent& h) {return (h.wnd.handle == 0 || hwnd == h.wnd.handle) && h.type == WindowEventType::Show; },
-			[&](const TrackedEvent& h) {
-				auto env = h.callback.Env();
-				Napi::HandleScope scope(env);
-				try { h.callback.MakeCallback(env.Global(), { Napi::BigInt::New(env,(uint64_t)hwnd),Napi::Number::New(env,event) }); }
-				catch (...) {}
-			});
-		break; }
+		case EVENT_OBJECT_DESTROY:
+			iterateHandlers(
+				[hwnd](const TrackedEvent& h) {return hwnd == h.wnd.handle && h.type == WindowEventType::Close; },
+				[](const std::shared_ptr<Napi::FunctionReference>& h) {
+					auto env = h->Env();
+					Napi::HandleScope scope(env);
+					//TODO more intelligent way to deal with js land callback errors?
+					try { h->MakeCallback(env.Global(), {}); }
+					catch (...) {}
+				});
+			break;
+		case EVENT_SYSTEM_CAPTURESTART: {
+			auto windowhwnd = GetAncestor(hwnd, GA_ROOT);
+			iterateHandlers(
+				[windowhwnd](const TrackedEvent& h) {return windowhwnd == h.wnd.handle && h.type == WindowEventType::Click; },
+				[](const std::shared_ptr<Napi::FunctionReference>& h) {
+					auto env = h->Env();
+					Napi::HandleScope scope(env);
+					try { h->MakeCallback(env.Global(), {}); }
+					catch (...) {}
+				});
+			break;
+		}
+		case EVENT_SYSTEM_MOVESIZESTART:
+		case EVENT_SYSTEM_MOVESIZEEND:
+		case EVENT_OBJECT_LOCATIONCHANGE: {
+			JSRectangle bounds = wnd.GetBounds();
+			const char* phase = (event == EVENT_SYSTEM_MOVESIZEEND ? "end" : event == EVENT_SYSTEM_MOVESIZESTART ? "start" : "moving");
+			iterateHandlers(
+				[hwnd](const TrackedEvent& h) {return hwnd == h.wnd.handle && h.type == WindowEventType::Move; },
+				[bounds, phase](const std::shared_ptr<Napi::FunctionReference>& h) {
+					auto env = h->Env();
+					Napi::HandleScope scope(env);
+					try { h->MakeCallback(env.Global(), { bounds.ToJs(env),Napi::String::New(env, phase) }); }
+					catch (...) {}
+				});
+			break;
+		}
+		case EVENT_OBJECT_CREATE: {
+			if (IsRsWindow(hwnd)) {
+				iterateHandlers(
+					[hwnd](const TrackedEvent& h) {return (h.wnd.handle == 0 || hwnd == h.wnd.handle) && h.type == WindowEventType::Show; },
+					[hwnd, event](const std::shared_ptr<Napi::FunctionReference>& h) {
+						auto env = h->Env();
+						Napi::HandleScope scope(env);
+						try { h->MakeCallback(env.Global(), { Napi::BigInt::New(env,(uint64_t)hwnd),Napi::Number::New(env,event) }); }
+						catch (...) {}
+					});
+			}
+			break;
+		}
 	}
 }
 
 TrackedEvent::TrackedEvent(OSWindow wnd, WindowEventType type, Napi::Function cb) {
 	this->wnd = wnd;
 	this->type = type;
-	this->callback = Napi::Persistent(cb);
-	this->callback.SuppressDestruct();
+	this->callback = std::make_shared<Napi::FunctionReference>(Napi::Persistent(cb));
 	DWORD pid;
 	//TODO error handling
 	GetWindowThreadProcessId(wnd.handle, &pid);
@@ -393,10 +403,8 @@ TrackedEvent::TrackedEvent(OSWindow wnd, WindowEventType type, Napi::Function cb
 		};
 		break;
 	case WindowEventType::Show:
-		//TODO don't need both here, currently spamming basically all event under all windows (hwnd=0)
 		this->hooks = {
 			WindowsEventHook::GetHook(wnd.handle,WindowsEventGroup::Object),
-			WindowsEventHook::GetHook(wnd.handle,WindowsEventGroup::System),
 		};
 		break;
 	default:

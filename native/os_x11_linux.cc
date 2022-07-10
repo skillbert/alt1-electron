@@ -4,50 +4,69 @@
 #include <napi.h>
 #include <proc/readproc.h>
 #include <xcb/composite.h>
+#include <algorithm>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
 #include "os.h"
 #include "linux/x11.h"
 #include "linux/shm.h"
 
 using namespace priv_os_x11;
 
-void OSWindow::SetBounds(JSRectangle bounds) {
-	ensureConnection();
-	xcb_configure_window_value_list_t config = {
-		.x = bounds.x,
-		.y = bounds.y,
-		.width = (uint32_t) bounds.width,
-		.height = (uint32_t) bounds.height,
-		0, 0, 0
-	};
+struct TrackedEvent {
+	xcb_window_t window;
+	WindowEventType type;
+	Napi::ThreadSafeFunction callback;
+	Napi::FunctionReference callbackRef;
+	TrackedEvent(xcb_window_t window, WindowEventType type, Napi::Function callback) :
+		window(window),
+		type(type),
+		callback(Napi::ThreadSafeFunction::New(callback.Env(), callback, "event", 0, 1, [](Napi::Env) {})),
+		callbackRef(Napi::Persistent(callback)) {}
+};
 
-	xcb_configure_window_aux(connection, this->handle, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, &config);
-}
+std::thread windowThread;
+xcb_window_t windowThreadId;
+bool windowThreadExists = false;
+std::vector<TrackedEvent> trackedEvents;
+size_t rsDepth = 0;
+
+std::mutex eventMutex; // Locks the trackedEvents vector
+std::mutex windowThreadMutex; // Locks windowThread and windowThreadId. Should NEVER be locked from inside the window thread
+std::mutex rsDepthMutex; // Locks the rsDepth variable
+
+void WindowThread();
+void StartWindowThread();
 
 JSRectangle OSWindow::GetBounds() {
-	ensureConnection();
-	xcb_query_tree_cookie_t cookie = xcb_query_tree_unchecked(connection, this->handle);
-	std::unique_ptr<xcb_query_tree_reply_t, decltype(&free)> reply { xcb_query_tree_reply(connection, cookie, NULL), &free };
-	if (!reply) {
-		return JSRectangle();
-	}
-
-	if (reply->parent == reply->root) {
-		// not reparented to wm - probably has no border
-		return this->GetClientBounds();
-	}
-
-	return OSWindow(reply->parent).GetClientBounds();
+	return GetClientBounds();
 }
 
 JSRectangle OSWindow::GetClientBounds() {
 	ensureConnection();
-	xcb_get_geometry_cookie_t cookie = xcb_get_geometry_unchecked(connection, this->handle);
-	std::unique_ptr<xcb_get_geometry_reply_t, decltype(&free)> reply { xcb_get_geometry_reply(connection, cookie, NULL), &free };
-	if (!reply) { 
+	xcb_generic_error_t *error = NULL;
+	xcb_get_geometry_cookie_t gcookie = xcb_get_geometry(connection, this->handle);
+	xcb_get_geometry_reply_t* geometry = xcb_get_geometry_reply(connection, gcookie, &error);
+	if (error != NULL) {
+		free(error);
 		return JSRectangle();
 	}
-
-	return JSRectangle(reply->x, reply->y, reply->width, reply->height);
+	error = NULL;
+	xcb_translate_coordinates_cookie_t tcookie = xcb_translate_coordinates(connection, this->handle, rootWindow, geometry->x, geometry->y);
+	xcb_translate_coordinates_reply_t* translation = xcb_translate_coordinates_reply(connection, tcookie, &error);
+	if (error != NULL) {
+		free(error);
+		free(geometry);
+		return JSRectangle();
+	}
+	auto x = translation->dst_x;
+    auto y = translation->dst_y;
+    auto w = geometry->width;
+    auto h = geometry->height;
+	free(geometry);
+	free(translation);
+	return JSRectangle(x, y, w, h);
 }
 
 bool OSWindow::IsValid() {
@@ -97,8 +116,35 @@ OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
 	return OSWindow(handleint);
 }
 
-void GetRsHandlesRecursively(const xcb_window_t window, std::vector<OSWindow>* out, unsigned int* deepest, unsigned int depth = 0) {
-	const uint32_t long_length = 4096;
+bool IsRsWindow(const xcb_window_t window) {
+	constexpr uint32_t long_length = 64; // Any length higher than 2x+3 of the longest string we may match is fine
+	// Check window class (WM_CLASS property); this is set by the application controlling the window
+	// Also check WM_TRANSIENT_FOR is not set, this will be set on things like popups
+	xcb_get_property_cookie_t cookieProp = xcb_get_property(connection, 0, window, XCB_ATOM_WM_CLASS, XCB_ATOM_STRING, 0, long_length);
+	xcb_get_property_cookie_t cookieTransient = xcb_get_property(connection, 0, window, XCB_ATOM_WM_TRANSIENT_FOR, XCB_ATOM_WINDOW, 0, long_length);
+	xcb_get_property_reply_t* replyProp = xcb_get_property_reply(connection, cookieProp, NULL);
+	if (replyProp != NULL) {
+		auto len = xcb_get_property_value_length(replyProp);
+		// if len == long_length then that means we didn't read the whole property, so discard.
+		if (len > 0 && (uint32_t)len < long_length) {
+			char buffer[long_length] = { 0 };
+			memcpy(buffer, xcb_get_property_value(replyProp), len);
+			// first is instance name, then class name - both null terminated. we want class name.
+			const char* classname = buffer + strlen(buffer) + 1;
+			if (strcmp(classname, "RuneScape") == 0 || strcmp(classname, "steam_app_1343400") == 0) {
+				auto replyTransient = xcb_get_property_reply(connection, cookieTransient, NULL);
+				if (replyTransient && xcb_get_property_value_length(replyTransient) == 0) {
+					free(replyProp);
+					return true;
+				}
+			}
+		}
+	}
+	free(replyProp);
+	return false;
+}
+
+void GetRsHandlesRecursively(const xcb_window_t window, std::vector<OSWindow>* out, unsigned int depth = 0) {
 	xcb_query_tree_cookie_t cookie = xcb_query_tree(connection, window);
 	xcb_query_tree_reply_t* reply = xcb_query_tree_reply(connection, cookie, NULL);
 	if (reply == NULL) {
@@ -108,32 +154,21 @@ void GetRsHandlesRecursively(const xcb_window_t window, std::vector<OSWindow>* o
 	xcb_window_t* children = xcb_query_tree_children(reply);
 
 	for (auto i = 0; i < xcb_query_tree_children_length(reply); i++) {
-		// First, check WM_CLASS for either "RuneScape" or "steam_app_1343400"
 		xcb_window_t child = children[i];
-		xcb_get_property_cookie_t cookieProp = xcb_get_property(connection, 0, child, XCB_ATOM_WM_CLASS, XCB_ATOM_STRING, 0, long_length);
-		xcb_get_property_reply_t* replyProp = xcb_get_property_reply(connection, cookieProp, NULL);
-		if (replyProp != NULL) {
-			auto len = xcb_get_property_value_length(replyProp);
-			// if len == long_length then that means we didn't read the whole property, so discard.
-			if (len > 0 && (uint32_t)len < long_length) {
-				char buffer[long_length] = { 0 };
-				memcpy(buffer, xcb_get_property_value(replyProp), len);
-				// first is instance name, then class name - both null terminated. we want class name.
-				const char* classname = buffer + strlen(buffer) + 1;
-				if (strcmp(classname, "RuneScape") == 0 || strcmp(classname, "steam_app_1343400") == 0) {
-					// Now, only take this if it's one of the deepest instances found so far
-					if (depth > *deepest) {
-						out->clear();
-						out->push_back(child);
-						*deepest = depth;
-					} else if (depth == *deepest) {
-						out->push_back(child);
-					}
-				}
+		if (IsRsWindow(child)) {
+			rsDepthMutex.lock();
+			// Only take this if it's one of the deepest instances found so far
+			if (depth > rsDepth) {
+				out->clear();
+				out->push_back(child);
+				rsDepth = depth;
+			} else if (depth == rsDepth) {
+				out->push_back(child);
 			}
+			rsDepthMutex.unlock();
 		}
-		free(replyProp);
-		GetRsHandlesRecursively(child, out, deepest, depth + 1);
+		
+		GetRsHandlesRecursively(child, out, depth + 1);
 	}
 
 	free(reply);
@@ -142,69 +177,35 @@ void GetRsHandlesRecursively(const xcb_window_t window, std::vector<OSWindow>* o
 std::vector<OSWindow> OSGetRsHandles() {
 	ensureConnection();
 	std::vector<OSWindow> out;
-	unsigned int deepest = 0;
-	GetRsHandlesRecursively(rootWindow, &out, &deepest);
+	GetRsHandlesRecursively(rootWindow, &out);
 	return out;
 }
 
-OSWindow OSFindMainWindow(unsigned long process_id) {
+void OSSetWindowParent(OSWindow window, OSWindow parent) {
 	ensureConnection();
-	std::vector<xcb_window_t> windows = findWindowsWithPid((pid_t) process_id);
 
-	if (windows.size() == 0){
-		return OSWindow(0);
+	// If the parent handle is 0, we're supposed to detach, not attach
+	if (parent.handle != 0) {
+		xcb_change_property(connection, XCB_PROP_MODE_REPLACE, window.handle, XCB_ATOM_WM_TRANSIENT_FOR, XCB_ATOM_WINDOW, 32, 1, &parent.handle);
+	} else {
+		xcb_delete_property(connection, window.handle, XCB_ATOM_WM_TRANSIENT_FOR);
+		xcb_flush(connection);
 	}
-
-	return OSWindow(windows[0]);
 }
 
-
-
-void OSSetWindowParent(OSWindow wnd, OSWindow parent) {
-	ensureConnection();
-	// This does not work:
-	// 1. It show up on screenshot
-	// 2. It break setbounds somehow
-	// 3. Resizing doesn't work as it don't use setbounds
-	// xcb_reparent_window(connection, wnd.handle, parent.handle, 0, 0);
-}
-
-//TODO obsolete?
-void OSCaptureDesktop(void* target, size_t maxlength, int x, int y, int w, int h) {
-	ensureConnection();
-	XShmCapture acquirer(connection, rootWindow);
-	acquirer.copy(reinterpret_cast<char*>(target), maxlength, x, y, w, h);
-}
-
-//TODO obsolete?
-void OSCaptureWindow(void* target, size_t maxlength, OSWindow wnd, int x, int y, int w, int h) {
+void OSCaptureMulti(OSWindow wnd, CaptureMode mode, vector<CaptureRect> rects, Napi::Env env) {
+	// Ignore capture mode, XComposite will always work
 	ensureConnection();
 	xcb_composite_redirect_window(connection, wnd.handle, XCB_COMPOSITE_REDIRECT_AUTOMATIC);
 	xcb_pixmap_t pixId = xcb_generate_id(connection);
 	xcb_composite_name_window_pixmap(connection, wnd.handle, pixId);
 
-	XShmCapture acquirer(connection, pixId);
-	acquirer.copy(reinterpret_cast<char*>(target), maxlength, x, y, w, h);
-
-	xcb_free_pixmap(connection, pixId);
-}
-
-void OSCaptureDesktopMulti(OSWindow wnd, vector<CaptureRect> rects) {
-	ensureConnection();
-	XShmCapture acquirer(connection, rootWindow);
-	//TODO double check and document desktop 0 special case
-	auto offset = wnd.GetClientBounds();
-
-	for (CaptureRect &rect : rects) {
-		acquirer.copy(reinterpret_cast<char*>(rect.data), rect.size, rect.rect.x + offset.x, rect.rect.y + offset.y, rect.rect.width, rect.rect.height);
+	xcb_get_geometry_cookie_t cookie = xcb_get_geometry(connection, pixId);
+	xcb_get_geometry_reply_t* reply = xcb_get_geometry_reply(connection, cookie, NULL);
+	if (!reply) {
+		xcb_free_pixmap(connection, pixId);
+		return;
 	}
-}
-
-void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects) {
-	ensureConnection();
-	xcb_composite_redirect_window(connection, wnd.handle, XCB_COMPOSITE_REDIRECT_AUTOMATIC);
-	xcb_pixmap_t pixId = xcb_generate_id(connection);
-	xcb_composite_name_window_pixmap(connection, wnd.handle, pixId);
 
 	XShmCapture acquirer(connection, pixId);
 
@@ -212,21 +213,8 @@ void OSCaptureWindowMulti(OSWindow wnd, vector<CaptureRect> rects) {
 		acquirer.copy(reinterpret_cast<char*>(rect.data), rect.size, rect.rect.x, rect.rect.y, rect.rect.width, rect.rect.height);
 	}
 
+	free(reply);
 	xcb_free_pixmap(connection, pixId);
-}
-
-void OSCaptureMulti(OSWindow wnd, CaptureMode mode, vector<CaptureRect> rects, Napi::Env env) {
-	switch (mode) {
-	case CaptureMode::Desktop: {
-		OSCaptureDesktopMulti(wnd, rects);
-		break;
-	}
-	case CaptureMode::Window:
-		OSCaptureWindowMulti(wnd, rects);
-		break;
-	default:
-		throw Napi::RangeError::New(env, "Capture mode not supported");
-	}
 }
 
 OSWindow OSGetActiveWindow() {
@@ -238,12 +226,218 @@ OSWindow OSGetActiveWindow() {
 
 	return OSWindow(window);
 }
-	
 
-void OSNewWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) {
 
+// Only for use from the window thread
+struct CondPair {
+	std::condition_variable condvar;
+	std::mutex mutex;
+	bool done;
+	CondPair(): done(false) {}
+	CondPair(CondPair& other): done(other.done) {}
+	CondPair(CondPair&& other): done(other.done) {}
+};
+std::vector<CondPair> condvars;
+template<typename F, typename COND>
+void IterateEvents(COND cond, F callback) {
+	eventMutex.lock();
+	for (auto it = trackedEvents.begin(); it != trackedEvents.end(); it++) {
+		if (cond(*it)) {
+			condvars.push_back(CondPair());
+			CondPair* pair = &*condvars.end();
+			it->callback.BlockingCall([callback, &pair](Napi::Env env, Napi::Function jsCallback) {
+				callback(env, jsCallback);
+				std::unique_lock<std::mutex> lock(pair->mutex);
+				pair->done = true;
+				pair->condvar.notify_all();
+			});
+		}
+	}
+	eventMutex.unlock();
+	for(auto it = condvars.begin(); it != condvars.end(); it++) {
+		std::unique_lock<std::mutex> lock(it->mutex);
+		while(!it->done) it->condvar.wait(lock);
+	}
+	condvars.clear();
 }
 
-void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) {
 
+void OSNewWindowListener(OSWindow window, WindowEventType type, Napi::Function callback) {
+	auto event = TrackedEvent(window.handle, type, callback);
+	
+	// Add the event
+	eventMutex.lock();
+	trackedEvents.push_back(std::move(event));
+	eventMutex.unlock();
+
+	// Start a window thread if there wasn't already one running
+	StartWindowThread();
+}
+
+void OSRemoveWindowListener(OSWindow window, WindowEventType type, Napi::Function callback) {
+	eventMutex.lock();
+
+	// Remove any matching events
+	trackedEvents.erase(
+		std::remove_if(
+			trackedEvents.begin(),
+			trackedEvents.end(),
+			[window, type, callback](TrackedEvent& e){
+				if ((e.window == window.handle) && (e.type == type) && (Napi::Persistent(callback) == e.callbackRef)) {
+					e.callback.Release();
+					return true;
+				}
+				return false;
+			}
+		),
+		trackedEvents.end()
+	);
+
+	bool wait = trackedEvents.size() == 0;
+	eventMutex.unlock();
+
+	// If the window thread has nothing left to do, send it a wakeup, then wait for it to exit
+	if (wait) {
+		xcb_expose_event_t event;
+		event.response_type = XCB_EXPOSE;
+		event.count = 0;
+		event.window = windowThreadId;
+		xcb_send_event(connection, false, windowThreadId, XCB_EVENT_MASK_EXPOSURE, (const char*)(&event));
+		xcb_flush(connection);
+		windowThread.join();
+	}
+}
+
+bool WindowThreadShouldRun() {
+	eventMutex.lock();
+	bool anyEvents = trackedEvents.size() != 0;
+	eventMutex.unlock();
+	return anyEvents;
+}
+
+void StartWindowThread() {
+	// Only start if there isn't already a window thread running
+	windowThreadMutex.lock();
+	if (!windowThreadExists) {
+		windowThreadExists = true;
+		windowThread = std::thread(WindowThread);
+
+		windowThreadId = xcb_generate_id(connection);
+		std::cout << "native: starting window thread: id " << windowThreadId << std::endl;
+		constexpr uint32_t values[] = { XCB_EVENT_MASK_EXPOSURE };
+		xcb_create_window(connection, XCB_COPY_FROM_PARENT, windowThreadId, rootWindow, 0, 0, 1, 1, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_EVENT_MASK, values);
+		xcb_flush(connection);
+	}
+	windowThreadMutex.unlock();
+}
+
+// Should only be called from the window thread.
+// Called when a window's state has changed such that it may have become eligible for tracking.
+void HandleNewWindow(const xcb_window_t window, xcb_window_t parent) {
+	bool untrack = true;
+	if (IsRsWindow(window)) {
+		size_t depth = 0;
+		while (parent != rootWindow) {
+			xcb_query_tree_cookie_t cookie = xcb_query_tree(connection, parent);
+			xcb_query_tree_reply_t* reply = xcb_query_tree_reply(connection, cookie, NULL);
+			if (reply == NULL) {
+				return;
+			}
+			parent = reply->parent;
+			depth += 1;
+			free(reply);
+		}
+		rsDepthMutex.lock();
+		if (depth >= rsDepth) {
+			untrack = false;
+			rsDepth = depth;
+			rsDepthMutex.unlock();
+			IterateEvents(
+				[](const TrackedEvent& e){return e.type == WindowEventType::Show && e.window == 0;},
+				[window](Napi::Env env, Napi::Function callback){callback.Call({Napi::BigInt::New(env, (uint64_t)window), Napi::Number::New(env, XCB_CREATE_NOTIFY)});}
+			);
+		} else {
+			rsDepthMutex.unlock();
+		}
+		
+	}
+
+	if (untrack) {
+		IterateEvents(
+			[window](const TrackedEvent& e){return e.type == WindowEventType::Close && e.window == window;},
+			[](Napi::Env env, Napi::Function callback){callback.Call({});}
+		);
+	}
+}
+
+void WindowThread() {
+	// Request substructure events for root window
+	constexpr uint32_t rootValues[] = { XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY };
+    xcb_change_window_attributes(connection, rootWindow, XCB_CW_EVENT_MASK, rootValues);
+
+	xcb_generic_event_t* event;
+	while (WindowThreadShouldRun()) {
+		event = xcb_wait_for_event(connection);
+		if (event) {
+			auto type = event->response_type & ~0x80;
+			switch (type) {
+				case 0: {
+					xcb_generic_error_t* error = (xcb_generic_error_t*)event;
+					std::cout << "native: error: code " << (int)error->error_code << "; " << (int)error->major_code << "." << (int)error->minor_code << std::endl;
+					break;
+				}
+				case XCB_CONFIGURE_NOTIFY: {
+					xcb_configure_notify_event_t* configure = (xcb_configure_notify_event_t*)event;
+					xcb_window_t window = configure->window;
+					JSRectangle bounds = JSRectangle(configure->x, configure->y, configure->width, configure->height);
+					IterateEvents(
+						[window](const TrackedEvent& e){return e.type == WindowEventType::Move && e.window == window;},
+						[bounds](Napi::Env env, Napi::Function callback){callback.Call({bounds.ToJs(env), Napi::String::New(env, "end")});}
+					);
+					break;
+				}
+				case XCB_CREATE_NOTIFY: {
+					xcb_create_notify_event_t* create = (xcb_create_notify_event_t*)event;
+					if (!create->override_redirect) {
+						HandleNewWindow(create->window, create->parent);
+					}
+					break;
+				}
+				case XCB_DESTROY_NOTIFY: {
+					xcb_destroy_notify_event_t* destroy = (xcb_destroy_notify_event_t*)event;
+					xcb_window_t window = destroy->window;
+					IterateEvents(
+						[window](const TrackedEvent& e){return e.type == WindowEventType::Close && e.window == window;},
+						[](Napi::Env env, Napi::Function callback){callback.Call({});}
+					);
+					break;
+				}
+				case XCB_REPARENT_NOTIFY: {
+					xcb_reparent_notify_event_t* reparent = (xcb_reparent_notify_event_t*)event;
+					if(!reparent->override_redirect) {
+						HandleNewWindow(reparent->window, reparent->parent);
+					}
+					break;
+				}
+				case XCB_EXPOSE: {
+					// Not an important event, but we use XCB_EXPOSE to wake up the window thread spontaneously,
+					// so it's important to catch it here
+					break;
+				}
+				default: {
+					//std::cout << "native: got event type " << type << std::endl;
+					break;
+				}
+			}
+			free(event);
+		} else {
+			std::cout << "native: window thread encountered an error" << std::endl;
+			break;
+		}
+	}
+	windowThreadMutex.lock();
+	xcb_destroy_window(connection, windowThreadId);
+	windowThreadExists = false;
+	std::cout << "native: window thread exiting" << std::endl;
+	windowThreadMutex.unlock();
 }

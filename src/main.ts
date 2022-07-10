@@ -7,7 +7,7 @@ import { handleSchemeArgs } from "./schemehandler";
 import { patchImageDataShow, relPath, sameDomainResolve, schemestring } from "./lib";
 import { identifyApp } from "./appconfig";
 import { getActiveWindow, native, OSWindow, OSWindowPin, reloadAddon } from "./native";
-import { detectInstances, getRsInstanceFromWnd, RsInstance, rsInstances, initRsInstanceTracking } from "./rsinstance";
+import { detectInstances, getRsInstanceFromWnd, RsInstance, rsInstances, initRsInstanceTracking, stopRsInstanceTracking } from "./rsinstance";
 import { OverlayCommand, Rectangle, RsClientState } from "./shared";
 import { AppPermission, Bookmark, loadSettings, saveSettings, settings } from "./settings";
 import { boundMethod } from "autobind-decorator";
@@ -44,6 +44,7 @@ remoteMain.initialize();
 
 app.on("before-quit", e => {
 	rsInstances.forEach(c => c.close());
+	stopRsInstanceTracking();
 	saveSettings();
 });
 app.on("second-instance", (e, argv, cwd) => handleSchemeArgs(argv));
@@ -101,7 +102,13 @@ class ManagedWindow {
 			frame: false,
 			width: posrect.width,
 			height: posrect.height,
-			transparent: true
+			transparent: true,
+			fullscreenable: false,
+			resizable: true,
+			skipTaskbar: true,
+			minimizable: false,
+			maximizable: false,
+			show: false,
 		});
 		remoteMain.enable(this.window.webContents);
 
@@ -109,7 +116,7 @@ class ManagedWindow {
 		this.rsClient = rsclient;
 		this.appConfig = app;
 
-		this.windowPin = new OSWindowPin(this.nativeWindow, this.rsClient.window, "auto");
+		this.windowPin = new OSWindowPin(this.window, this.rsClient.window, "auto");
 		this.windowPin.once("close", () => {
 			this.window.close();
 			app.wasOpen = true;
@@ -125,7 +132,13 @@ class ManagedWindow {
 			this.windowPin.unpin();
 			fixTooltip();
 		});
-
+		
+		// NOTE: it's very very VERY important that the window must be created with `show: false` and that window.show()
+		// must be called AFTER creating the OSWindowPin. This allows us to manipulate the window before the WM mangles it.
+		this.window.once('ready-to-show', () => {
+			this.window.show();
+			this.windowPin.synchPosition(); // fixes electron not showing up sometimes
+		});
 		managedWindows.push(this);
 	}
 }

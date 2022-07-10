@@ -80,14 +80,6 @@ Napi::Value JSGetActiveWindow(const Napi::CallbackInfo& info) { return OSGetActi
 Napi::Value GetWindowBounds(const Napi::CallbackInfo& info) { return OSWindow::FromJsValue(info[0]).GetBounds().ToJs(info.Env()); }
 Napi::Value GetClientBounds(const Napi::CallbackInfo& info) { return OSWindow::FromJsValue(info[0]).GetClientBounds().ToJs(info.Env()); }
 Napi::Value GetWindowTitle(const Napi::CallbackInfo& info) { return Napi::String::New(info.Env(), OSWindow::FromJsValue(info[0]).GetTitle()); }
-void SetWindowBounds(const Napi::CallbackInfo& info) {
-	auto wnd = OSWindow::FromJsValue(info[0]);
-	int x = info[1].As<Napi::Number>().Int32Value();
-	int y = info[2].As<Napi::Number>().Int32Value();
-	int w = info[3].As<Napi::Number>().Int32Value();
-	int h = info[4].As<Napi::Number>().Int32Value();
-    wnd.SetBounds(JSRectangle(x, y, w, h));
-}
 void SetWindowParent(const Napi::CallbackInfo& info) {
 	auto wnd = OSWindow::FromJsValue(info[0]);
 	auto parent = OSWindow::FromJsValue(info[1]);
