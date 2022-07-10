@@ -49,7 +49,7 @@ namespace priv_os_x11 {
 		size_t targetPos = 0;
 		for (int row = y; row < y + h; row++) {
 			for (int col = x; col < x + w; col++) {
-				if (col < this->geometry->width && row < this->geometry->height) {
+				if (col >= 0 && row >= 0 && col < this->geometry->width && row < this->geometry->height) {
 					int pos = ((row * this->geometry->width) + col) * 4;
 					target[targetPos++] = this->shm[pos + 2];
 					target[targetPos++] = this->shm[pos + 1];
