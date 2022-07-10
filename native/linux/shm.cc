@@ -56,7 +56,10 @@ namespace priv_os_x11 {
 					target[targetPos++] = this->shm[pos];
 					target[targetPos++] = 0xFF; // alpha
 				} else {
-					targetPos += 4;
+					target[targetPos++] = 0;
+					target[targetPos++] = 0;
+					target[targetPos++] = 0;
+					target[targetPos++] = 0xFF;
 				}
 			}
 		}
