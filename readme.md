@@ -1,6 +1,11 @@
+
+# Alt1 Electron (name pending)
+This project is a experimental rewrite of the Alt1 Toolkit in Typescript, Electron and React. The project is currently in experimental state, it is not clear yet if this could become a replacement of C# Alt1.
+
 # Build
+You need a working nodejs installation including nodejs native build tools (is an option during installation) in order to compile Alt1.
 ```sh
-# Install
+# Install dependencies
 npm i
 
 # Build native modules
@@ -18,8 +23,7 @@ npm run ui
 ## Linux dependencies
 pkg-config libxcb-dev libxcb-shm-dev libxcb-composite-dev libxcb-ewmh-dev libprocps-dev
 
-# Alt1Lite (name pending)
-This project is a experimental rewrite of the Alt1 Toolkit in Typescript Electron and React. It is not clear yet if this could become a replacement of C# Alt1.
+# Why rewrite?
 
 ### Clean slate
 The architecture of present day Alt1 has been dictated by choices made 7 years ago. The Alt1 Toolkit was the result of a lot of experimenting and around poking in the dark. Many attemped features never worked out or have been scrapped or replaced. The many dead ends and design changes have built up to weigh down the code over the years and it is time to start over.
@@ -39,39 +43,58 @@ This has been the most long standing request. Starting from scratch with other p
 # Project status
 
 **Currently functional**
-- Basic app functionality
-- Overlay API
-- Capture API
-- Appconfig and saved apps
-- Window pinning
-- Multiclient support
-- OpenGL capture using old dll's
-- mp4 works! (twitch)
-	- still no widevine CDM so no netflix
-- changes in app libs use new fast capture API
-- rightclick detection
-- basic alt+1 hotkey detection
-
-**Missing features**
-- Toolbar
-- Unix/Mac implementation incomplete
-- Settings window
-	- installed apps
-	- capture mode previews and troubleshoot
-- add app window
-- browser handlers
-	- alt1:// protocol from internal browser
-	- remove toolbar on popups
-	- rightclick menu
-- Rewrite OpenGl capture
-- App resize visual snapping
-- Shippebleness in general
-- alt+1 hotkey
-	- app triggers
-- statusdaemon
-- Independent modules
-	- Screenshot sharing (alt+2)
-	- Window manipulation tool (alt+3)
+- [x] Basic app functionality
+- [x] Overlay API
+- [x] Capture API
+- [x] Appconfig and saved apps
+- [x] Window pinning
+- [x] Multiclient support
+- [x] OpenGL capture using old dll's
+- [x] mp4 works! (twitch)
+	- [ ] still no widevine CDM so no netflix
+- [x] changes in app libs use new fast capture API
+- [x] rightclick detection
+- [x] basic alt+1 hotkey detection
+- [ ] Toolbar
+- [ ] Settings window
+	- [ ] installed apps
+	- [ ] capture mode previews and troubleshoot
+- [ ] add app window
+- [ ] browser handlers
+	- [ ] alt1:// protocol from internal browser
+	- [ ] remove toolbar on popups
+	- [ ] rightclick menu
+- [ ] Rewrite and publish OpenGL capture
+- [ ] App resize visual snapping
+- [ ] Shippebleness in general
+- [ ] alt+1 hotkey
+	- [ ] app triggers
+- [ ] statusdaemon
+- [ ] Independent modules
+	- [ ] Screenshot sharing (alt+2)
+	- [ ] Window manipulation tool (alt+3)
+	
+**Platform specific**
+- [x] Windows
+	- [x] Basics
+	- [x] Window events API
+	- [x] Window pinning
+	- [x] Capture
+		- [x] OpenGL
+		- [x] Window
+		- [ ] UI to toggle during runtime
+- [x] Linux
+	- [x] Basics
+	- [x] Window events API
+	- [x] Window pinning
+	- [x] Capture
+		- [x] Window
+- [ ] MacOS
+	- [ ] Basics
+	- [ ] Window events API
+	- [ ] Window pinning
+	- [ ] Capture
+		- [ ] Window
 
 **TODO**
 - Actually implement capture method toggle
@@ -83,6 +106,7 @@ This has been the most long standing request. Starting from scratch with other p
 - Many little used api calls
 - Clean up native event situation for windows
 - Enable contextisolation in appwindow
+- Try to move RS specific constants from native code to ts/config files
 - Think some more about the name
 
 
