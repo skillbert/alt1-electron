@@ -2,9 +2,9 @@
 For any questions and code discussions you can talk in the `#development` channel in the [RuneApps discord](https://discord.gg/f24MRWm).
 
 ## Pull requests
-- PR's are meant for single fixes/issues/features, refrain from making unrelated code changes while working on your feature.
-  - PR's can only be accepted or rejected in it's entirety, if you add an unrelated rejected change the PR will be rejected in it's entirety.
-- If your PR changes how existing code works without adding anything major, please discuss it in the discord first, there is probably a good reason for the old bahavior.
+- PRs are meant for single fixes/issues/features, refrain from making unrelated code changes while working on your feature.
+  - A PR can only be accepted or rejected in its entirety. If you add an unrelated rejected change the PR will be rejected in its entirety.
+- If your PR changes how existing code works without adding anything major, please discuss it in the discord first, there is probably a good reason for the old behavior.
 - Please discuss any large projects in the discord server first, there may be someone working on it already, or there might be different plans already.
 
 ## Coding style
