@@ -42,6 +42,8 @@ This has been the most long standing request. Starting from scratch with other p
 
 # Project status
 
+See [contributing.md](./contributing.md) for information on how to contribute to this project.
+
 **Currently functional**
 - [x] Basic app functionality
 - [x] Overlay API
