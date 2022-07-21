@@ -1,5 +1,3 @@
-#fix build path situation
-11.2.1
 build
 dist
 
@@ -32,9 +30,6 @@ bld/
 
 # Visual Studio 2015 cache/options directory
 .vs/
-
-# VSCode settings directory
-.vscode/
 
 # MSTest test Results
 [Tt]est[Rr]esult*/
