@@ -100,7 +100,7 @@ function AppFrame(p: {}) {
 			<div className="buttonroot">
 				<div className="button" onClick={e => close()} />
 				<div className="button" onClick={e => setMinimized(!minimized)} />
-				<div className="button" onClick={toggleDevTools} onContextMenu={e => e.preventDefault()} />
+				<div className="button" onMouseDown={toggleDevTools} />
 				<div className="dragbutton" />
 			</div>
 		</div>
