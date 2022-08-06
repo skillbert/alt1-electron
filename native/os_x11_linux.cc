@@ -4,6 +4,7 @@
 #include <napi.h>
 #include <proc/readproc.h>
 #include <xcb/composite.h>
+#include <xcb/record.h>
 #include <algorithm>
 #include <thread>
 #include <mutex>
@@ -27,16 +28,17 @@ struct TrackedEvent {
 };
 
 std::thread windowThread;
-xcb_window_t windowThreadId;
+std::thread recordThread;
 bool windowThreadExists = false;
 std::vector<TrackedEvent> trackedEvents;
 size_t rsDepth = 0;
 
 std::mutex eventMutex; // Locks the trackedEvents vector
-std::mutex windowThreadMutex; // Locks windowThread and windowThreadId. Should NEVER be locked from inside the window thread
+std::mutex windowThreadMutex; // Locks windowThread. Should NEVER be locked from inside the window thread
 std::mutex rsDepthMutex; // Locks the rsDepth variable
 
 void WindowThread();
+void RecordThread();
 void StartWindowThread();
 
 JSRectangle OSWindow::GetBounds() {
@@ -117,6 +119,7 @@ OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
 }
 
 bool IsRsWindow(const xcb_window_t window) {
+	ensureConnection();
 	constexpr uint32_t long_length = 64; // Any length higher than 2x+3 of the longest string we may match is fine
 	// Check window class (WM_CLASS property); this is set by the application controlling the window
 	// Also check WM_TRANSIENT_FOR is not set, this will be set on things like popups
@@ -276,6 +279,7 @@ void OSNewWindowListener(OSWindow window, WindowEventType type, Napi::Function c
 
 void OSRemoveWindowListener(OSWindow window, WindowEventType type, Napi::Function callback) {
 	eventMutex.lock();
+	bool wait = trackedEvents.size() != 0;
 
 	// Remove any matching events
 	trackedEvents.erase(
@@ -293,18 +297,16 @@ void OSRemoveWindowListener(OSWindow window, WindowEventType type, Napi::Functio
 		trackedEvents.end()
 	);
 
-	bool wait = trackedEvents.size() == 0;
+	wait &= trackedEvents.size() == 0;
 	eventMutex.unlock();
 
 	// If the window thread has nothing left to do, send it a wakeup, then wait for it to exit
 	if (wait) {
-		xcb_expose_event_t event;
-		event.response_type = XCB_EXPOSE;
-		event.count = 0;
-		event.window = windowThreadId;
-		xcb_send_event(connection, false, windowThreadId, XCB_EVENT_MASK_EXPOSURE, (const char*)(&event));
+		xcb_disconnect(connection);
 		xcb_flush(connection);
 		windowThread.join();
+		recordThread.join();
+		connection = NULL;
 	}
 }
 
@@ -321,12 +323,7 @@ void StartWindowThread() {
 	if (!windowThreadExists) {
 		windowThreadExists = true;
 		windowThread = std::thread(WindowThread);
-
-		windowThreadId = xcb_generate_id(connection);
-		std::cout << "native: starting window thread: id " << windowThreadId << std::endl;
-		constexpr uint32_t values[] = { XCB_EVENT_MASK_EXPOSURE };
-		xcb_create_window(connection, XCB_COPY_FROM_PARENT, windowThreadId, rootWindow, 0, 0, 1, 1, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_EVENT_MASK, values);
-		xcb_flush(connection);
+		recordThread = std::thread(RecordThread);
 	}
 	windowThreadMutex.unlock();
 }
@@ -431,13 +428,91 @@ void WindowThread() {
 			}
 			free(event);
 		} else {
-			std::cout << "native: window thread encountered an error" << std::endl;
+			// Fatal error - probably because the application is stopping and we need to return now
 			break;
 		}
 	}
-	windowThreadMutex.lock();
-	xcb_destroy_window(connection, windowThreadId);
+
 	windowThreadExists = false;
 	std::cout << "native: window thread exiting" << std::endl;
-	windowThreadMutex.unlock();
+}
+
+void RecordThread() {
+	// Second event thread for using the X Record API, which we need to receive mouse button events
+	const xcb_query_extension_reply_t* ext = xcb_get_extension_data(connection, &xcb_record_id);
+	if (!ext) {
+		std::cerr << "native: X record extension is not supported; some features will not work" << std::endl;
+		return;
+	}
+
+	xcb_record_query_version_reply_t *version_reply = xcb_record_query_version_reply(connection, xcb_record_query_version(connection, XCB_RECORD_MAJOR_VERSION, XCB_RECORD_MINOR_VERSION), NULL);
+	if (version_reply) {
+		std::cout << "native: X record extension version: " << version_reply->major_version << "." << version_reply->minor_version << std::endl;
+		free(version_reply);
+	} else {
+		std::cout << "native: X record extension version is unknown" << std::endl;
+	}
+
+	auto id = xcb_generate_id(connection);
+	xcb_record_range_t range;
+	memset(&range, 0, sizeof(xcb_record_range_t));
+	range.device_events.first = XCB_BUTTON_PRESS;
+	range.device_events.last = XCB_BUTTON_RELEASE;
+	xcb_record_client_spec_t client_spec = XCB_RECORD_CS_ALL_CLIENTS;
+	xcb_void_cookie_t cookie = xcb_record_create_context_checked(connection, id, 0, 1, 1, &client_spec, &range);
+	xcb_generic_error_t* error = xcb_request_check(connection, cookie);
+	if (error) {
+		std::cout << "native: couldn't setup X record: xcb_record_create_context_checked returned " << (int)error->error_code << "; some features will not work" << std::endl;
+		free(error);
+		return;
+	}
+
+	auto rec_connection = xcb_connect(NULL, NULL);
+	if (xcb_connection_has_error(rec_connection)) {
+		std::cout << "native: couldn't start record thread connection; some features will not work" << std::endl;
+		return;
+	}
+
+	// xcb-record event loop
+	xcb_record_enable_context_cookie_t cookie2 = xcb_record_enable_context(rec_connection, id);
+	while (WindowThreadShouldRun()) {
+		xcb_record_enable_context_reply_t* reply = xcb_record_enable_context_reply(rec_connection, cookie2, NULL);
+		if (!reply) {
+			std::cout << "native: error in xcb_record_enable_context_reply" << std::endl;
+			continue;
+		}
+		if (reply->client_swapped) {
+			std::cout << "native: unsupported setting client_swapped; please report this error" << std::endl;
+			break;
+		}
+
+		// 0 is XRecordFromServer; we also receive 4 (XRecordStartOfData) at the start of execution, and
+		// 5 (XRecordEndOfData) when we invalidate the main connection, which works as this thread's end-wakeup
+		if (reply->category == 0) {
+			uint8_t* data = xcb_record_enable_context_data(reply);
+			int data_len = xcb_record_enable_context_data_length(reply);
+			if (data_len == sizeof(xcb_button_press_event_t)) {
+				xcb_generic_event_t* ev = (xcb_generic_event_t*)data;
+				switch (ev->response_type) {
+					case XCB_BUTTON_PRESS: {
+						xcb_button_press_event_t* event = (xcb_button_press_event_t*)ev;
+						std::cout << "DEBUG: button press, detail " << (int)event->detail << ", root xy " << event->root_x << " " << event->root_y << std::endl;
+						break;
+					}
+					case XCB_BUTTON_RELEASE: {
+						xcb_button_release_event_t* event = (xcb_button_release_event_t*)ev;
+						std::cout << "DEBUG: button release, detail " << (int)event->detail << std::endl;
+						break;
+					}
+				}
+			}
+		}
+		free(reply);
+	}
+
+	xcb_record_disable_context(rec_connection, id);
+	xcb_record_free_context(rec_connection, id);
+	xcb_flush(rec_connection);
+	xcb_disconnect(rec_connection);
+	std::cout << "native: record thread exiting" << std::endl;
 }
