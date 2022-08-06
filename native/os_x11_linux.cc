@@ -437,6 +437,61 @@ void WindowThread() {
 	std::cout << "native: window thread exiting" << std::endl;
 }
 
+void HitTestRecursively(xcb_window_t window, int16_t x, int16_t y, int16_t offset_x, int16_t offset_y, xcb_window_t& out_window) {
+	xcb_query_tree_cookie_t cookie = xcb_query_tree(connection, window);
+	xcb_query_tree_reply_t* reply = xcb_query_tree_reply(connection, cookie, NULL);
+	if (reply == NULL) {
+		return;
+	}
+
+	xcb_window_t* children = xcb_query_tree_children(reply);
+	xcb_generic_error_t *error;
+
+	for (auto i = 0; i < xcb_query_tree_children_length(reply); i++) {
+		xcb_window_t child = children[i];
+
+		error = NULL;
+		xcb_get_window_attributes_cookie_t acookie = xcb_get_window_attributes(connection, child);
+		xcb_get_window_attributes_reply_t* attributes = xcb_get_window_attributes_reply(connection, acookie, &error);
+		if(error) {
+			free(error);
+			continue;
+		}
+		auto map_state = attributes->map_state;
+		free(attributes);
+		if (map_state != XCB_MAP_STATE_VIEWABLE) {
+			continue;
+		}
+
+		error = NULL;
+		xcb_get_geometry_cookie_t gcookie = xcb_get_geometry(connection, child);
+		xcb_get_geometry_reply_t* geometry = xcb_get_geometry_reply(connection, gcookie, &error);
+		if (error != NULL) {
+			free(error);
+			continue;
+		}
+		int16_t gx = geometry->x + offset_x;
+		int16_t gy = geometry->y + offset_y;
+		auto gw = geometry->width;
+		auto gh = geometry->height;
+		free(geometry);
+
+		if (x >= gx && x <= (gx + gw) && y >= gy && y <= (gy + gh)) {
+			out_window = child;
+			HitTestRecursively(child, x, y, gx, gy, out_window);
+		}
+	}
+
+	free(reply);
+}
+
+// To be called from Record thread. Recursively finds the topmost window which passes hit test at given root coordinates
+xcb_window_t HitTest(int16_t x, int16_t y) {
+	xcb_window_t out = rootWindow;
+	HitTestRecursively(rootWindow, x, y, 0, 0, out);
+	return out;
+}
+
 void RecordThread() {
 	// Second event thread for using the X Record API, which we need to receive mouse button events
 	const xcb_query_extension_reply_t* ext = xcb_get_extension_data(connection, &xcb_record_id);
@@ -496,12 +551,15 @@ void RecordThread() {
 				switch (ev->response_type) {
 					case XCB_BUTTON_PRESS: {
 						xcb_button_press_event_t* event = (xcb_button_press_event_t*)ev;
-						std::cout << "DEBUG: button press, detail " << (int)event->detail << ", root xy " << event->root_x << " " << event->root_y << std::endl;
+						auto button = event->detail;
+						int16_t click_x = event->root_x;
+						int16_t click_y = event->root_y;
+						xcb_window_t hit = HitTest(click_x, click_y);
+						std::cout << "Clicked on window " << hit << std::endl;
 						break;
 					}
 					case XCB_BUTTON_RELEASE: {
-						xcb_button_release_event_t* event = (xcb_button_release_event_t*)ev;
-						std::cout << "DEBUG: button release, detail " << (int)event->detail << std::endl;
+						// Mouse button released - may be useful in future?
 						break;
 					}
 				}
