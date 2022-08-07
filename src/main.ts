@@ -302,7 +302,7 @@ function initIpcApi() {
 		let state: RsClientState = {
 			active: wnd.rsClient.isActive,
 			clientRect: wnd.rsClient.window.getClientBounds(),
-			lastBlurTime: wnd.rsClient.lastBlurTime,
+			lastActiveTime: wnd.rsClient.lastActiveTime,
 			ping: 10,//TODO
 			scaling: 1,//TODO
 			captureMode: settings.captureMode
