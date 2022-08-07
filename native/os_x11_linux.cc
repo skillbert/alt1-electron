@@ -586,7 +586,10 @@ void RecordThread() {
 							int16_t click_x = event->root_x;
 							int16_t click_y = event->root_y;
 							xcb_window_t hit = HitTest(click_x, click_y);
-							std::cout << "Clicked on window " << hit << std::endl;
+							IterateEvents(
+								[hit](const TrackedEvent& e){return e.type == WindowEventType::Click && e.window == hit;},
+								[](Napi::Env env, Napi::Function callback){callback.Call({});}
+							);
 						}
 						break;
 					}
