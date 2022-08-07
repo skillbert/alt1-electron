@@ -5,6 +5,7 @@
 #include <proc/readproc.h>
 #include <xcb/composite.h>
 #include <xcb/record.h>
+#include <xcb/shape.h>
 #include <algorithm>
 #include <thread>
 #include <mutex>
@@ -453,7 +454,7 @@ void HitTestRecursively(xcb_window_t window, int16_t x, int16_t y, int16_t offse
 		error = NULL;
 		xcb_get_window_attributes_cookie_t acookie = xcb_get_window_attributes(connection, child);
 		xcb_get_window_attributes_reply_t* attributes = xcb_get_window_attributes_reply(connection, acookie, &error);
-		if(error) {
+		if(error != NULL) {
 			free(error);
 			continue;
 		}
@@ -476,7 +477,36 @@ void HitTestRecursively(xcb_window_t window, int16_t x, int16_t y, int16_t offse
 		auto gh = geometry->height;
 		free(geometry);
 
-		if (x >= gx && x <= (gx + gw) && y >= gy && y <= (gy + gh)) {
+		bool hit = true;
+		xcb_shape_get_rectangles_cookie_t rcookie[3] = { // 0=ShapeBounding, 1=ShapeClip, 2=ShapeInput
+			xcb_shape_get_rectangles(connection, child, 0),
+			xcb_shape_get_rectangles(connection, child, 1),
+			xcb_shape_get_rectangles(connection, child, 2),
+		};
+        xcb_shape_get_rectangles_reply_t* rectangles[3] = {
+			xcb_shape_get_rectangles_reply(connection, rcookie[0], NULL),
+			xcb_shape_get_rectangles_reply(connection, rcookie[1], NULL),
+			xcb_shape_get_rectangles_reply(connection, rcookie[2], NULL),
+		};
+        if (rectangles[0] && rectangles[1] && rectangles[2]) {
+			for(auto j = 0; j < 3; j += 1) {
+				bool hit_shape = false;
+				auto rect_count = xcb_shape_get_rectangles_rectangles_length(rectangles[j]);
+				xcb_rectangle_t* rects = xcb_shape_get_rectangles_rectangles(rectangles[j]);
+				for (auto k = 0; k < rect_count; k += 1) {
+					xcb_rectangle_t rect = rects[k];
+					hit_shape |= (x >= (rect.x + gx) && x < (rect.x + rect.width + gx) && y >= (rect.y + gy) && y < (rect.y + rect.height + gy));
+				}
+				hit &= hit_shape;
+			}
+		} else {
+            hit = (x >= gx && x < (gx + gw) && y >= gy && y < (gy + gh));
+        }
+		free(rectangles[0]);
+		free(rectangles[1]);
+		free(rectangles[2]);
+
+		if (hit) {
 			out_window = child;
 			HitTestRecursively(child, x, y, gx, gy, out_window);
 		}
