@@ -268,9 +268,15 @@ void IterateEvents(COND cond, F callback) {
 
 void OSNewWindowListener(OSWindow window, WindowEventType type, Napi::Function callback) {
 	auto event = TrackedEvent(window.handle, type, callback);
+
+	// If this is a new window, request all its events from X server
+	eventMutex.lock();
+	if (window.handle != 0 && std::find_if(trackedEvents.begin(), trackedEvents.end(), [window](TrackedEvent& e) {return e.window == window.handle;}) == trackedEvents.end()) {
+		constexpr uint32_t values[] = { XCB_EVENT_MASK_STRUCTURE_NOTIFY };
+		xcb_change_window_attributes(connection, window.handle, XCB_CW_EVENT_MASK, values);
+	}
 	
 	// Add the event
-	eventMutex.lock();
 	trackedEvents.push_back(std::move(event));
 	eventMutex.unlock();
 
@@ -280,6 +286,13 @@ void OSNewWindowListener(OSWindow window, WindowEventType type, Napi::Function c
 
 void OSRemoveWindowListener(OSWindow window, WindowEventType type, Napi::Function callback) {
 	eventMutex.lock();
+
+	// If there are no more tracked events for this window, request X server to stop sending any events about it
+	if (window.handle != 0 && std::find_if(trackedEvents.begin(), trackedEvents.end(), [window](TrackedEvent& e) {return e.window == window.handle;}) == trackedEvents.end()) {
+		constexpr uint32_t values[] = { XCB_NONE };
+		xcb_change_window_attributes_checked(connection, window.handle, XCB_CW_EVENT_MASK, values);
+	}
+
 	bool wait = trackedEvents.size() != 0;
 
 	// Remove any matching events
