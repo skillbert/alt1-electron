@@ -265,6 +265,25 @@ void IterateEvents(COND cond, F callback) {
 	condvars.clear();
 }
 
+void OSSetWindowShape(OSWindow window, std::vector<JSRectangle> rects) {
+	std::vector<xcb_rectangle_t> xrects;
+	xrects.reserve(rects.size());
+	for(size_t i = 0; i < rects.size(); i += 1) {
+		xcb_rectangle_t rect;
+		rect.x = rects[i].x;
+		rect.y = rects[i].y;
+		rect.width = rects[i].width;
+		rect.height = rects[i].height;
+		xrects.push_back(rect);
+	}
+	xcb_shape_rectangles(connection, 0, 0, 0, window.handle, 0, 0, xrects.size(), xrects.data());
+	xcb_flush(connection);
+}
+
+void OSUnsetWindowShape(OSWindow window) {
+	xcb_shape_mask(connection, 0, 0, window.handle, 0, 0, 0);
+}
+
 
 void OSNewWindowListener(OSWindow window, WindowEventType type, Napi::Function callback) {
 	auto event = TrackedEvent(window.handle, type, callback);
