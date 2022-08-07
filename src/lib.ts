@@ -44,7 +44,9 @@ export function patchImageDataShow() {
 
 export async function showImageData(img: ImageData) {
 	if (process.env.NODE_ENV === "development") {
-		let filename = path.resolve(`./debugimgs/debugimg_${Math.random() * 1000 | 0}.png`);
+		let dir = "./debugimgs";
+		fs.mkdirSync(dir, { recursive: true });
+		let filename = path.resolve(`${dir}/debugimg_${Math.random() * 1000 | 0}.png`);
 		fs.writeFileSync(filename, await img.toFileBytes("image/png"));
 		shell.openPath(filename);
 	}

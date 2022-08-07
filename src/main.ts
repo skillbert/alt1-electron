@@ -12,6 +12,7 @@ import { OverlayCommand, Rectangle, RsClientState } from "./shared";
 import { AppPermission, Bookmark, loadSettings, saveSettings, settings } from "./settings";
 import { boundMethod } from "autobind-decorator";
 import * as remoteMain from "@electron/remote/main";
+import { initIpcApi } from "./ipcapi";
 
 if (process.env.NODE_ENV === "development") {
 	patchImageDataShow();
@@ -22,7 +23,7 @@ if (process.env.NODE_ENV === "development") {
 
 export const managedWindows: ManagedWindow[] = [];
 export function getManagedWindow(w: WebContents) { return managedWindows.find(q => q.window.webContents == w); }
-export function getManagedAppWindow(id: number) { return managedWindows.find(q => q.appFrameId == id); }
+export function getManagedAppWindow(id: number) { return managedWindows.find(q => q.appFrameId == id || q.window.webContents.id == id); }
 var tray: Tray | null = null;
 var alt1icon = nativeImage.createFromPath(relPath(require("!file-loader!./imgs/alt1icon.png").default));
 var tooltipWindow: TooltipWindow | null = null;
@@ -52,7 +53,7 @@ app.on("window-all-closed", e => e.preventDefault());
 app.once("ready", () => {
 	globalShortcut.register("Alt+1", alt1Pressed);
 	drawTray();
-	initIpcApi();
+	initIpcApi(ipcMain);
 	initRsInstanceTracking();
 });
 
@@ -77,7 +78,7 @@ export function openApp(app: Bookmark, inst?: RsInstance) {
 	else { new ManagedWindow(app, inst); }
 }
 
-class ManagedWindow {
+export class ManagedWindow {
 	appConfig: Bookmark;
 	window: BrowserWindow;
 	nativeWindow: OSWindow;
@@ -104,7 +105,7 @@ class ManagedWindow {
 			height: posrect.height,
 			transparent: true,
 			fullscreenable: false,
-			resizable: true,
+			resizable: false,//prevent electron from adding resize handlers that cover the dom around the border
 			skipTaskbar: true,
 			minimizable: false,
 			maximizable: false,
@@ -121,9 +122,6 @@ class ManagedWindow {
 			this.window.close();
 			app.wasOpen = true;
 		});
-		this.windowPin.on("moved", () => {
-			app.lastRect = this.windowPin.getPinRect();
-		});
 		this.windowPin.setPinRect(posrect);
 
 		this.window.loadFile(path.resolve(__dirname, "appframe/index.html"));
@@ -132,7 +130,7 @@ class ManagedWindow {
 			this.windowPin.unpin();
 			fixTooltip();
 		});
-		
+
 		// NOTE: it's very very VERY important that the window must be created with `show: false` and that window.show()
 		// must be called AFTER creating the OSWindowPin. This allows us to manipulate the window before the WM mangles it.
 		this.window.once('ready-to-show', () => {
@@ -255,7 +253,7 @@ class TooltipWindow {
 	}
 }
 
-function fixTooltip() {
+export function fixTooltip() {
 	let text = "";
 	for (let wnd of managedWindows) {
 		if (wnd.activeTooltip) {
@@ -275,67 +273,3 @@ function fixTooltip() {
 	}
 }
 
-function initIpcApi() {
-	ipcMain.on("identifyapp", async (e, configurl) => {
-		try {
-			let url = sameDomainResolve(e.sender.getURL(), configurl);
-			await identifyApp(url);
-		} catch (e) {
-			console.error(e);
-		}
-	});
-
-	ipcMain.on("capturesync", (e, x, y, width, height) => {
-		try {
-			let wnd = getManagedAppWindow(e.sender.id);
-			if (!wnd?.rsClient.window) { throw new Error("capture window not found"); }
-			let capt = native.captureWindowMulti(wnd.rsClient.window.handle, settings.captureMode, { main: { x, y, width, height } });
-			e.returnValue = { value: { width, height, data: capt.main } };
-		} catch (err) {
-			e.returnValue = { error: "" + err };
-		}
-	});
-
-	//TODO remove
-	ipcMain.handle("test", (e, buf) => { return buf; });
-
-	ipcMain.on("rsbounds", (e) => {
-		let wnd = getManagedAppWindow(e.sender.id);
-		if (!wnd?.rsClient.window) { throw new Error("rs window not found"); }
-		let state: RsClientState = {
-			active: wnd.rsClient.isActive,
-			clientRect: wnd.rsClient.window.getClientBounds(),
-			lastBlurTime: wnd.rsClient.lastBlurTime,
-			ping: 10,//TODO
-			scaling: 1,//TODO
-			captureMode: settings.captureMode
-		};
-		e.returnValue = { value: state };
-	});
-
-	ipcMain.handle("capture", (e, x, y, width, height) => {
-		let wnd = getManagedAppWindow(e.sender.id);
-		if (!wnd?.rsClient.window) { throw new Error("rs window not found"); }
-		return native.captureWindowMulti(wnd.rsClient.window.handle, settings.captureMode, { main: { x, y, width, height } }).main;
-	});
-
-	ipcMain.handle("capturemulti", (e, rects: { [key: string]: Rectangle }) => {
-		let wnd = getManagedAppWindow(e.sender.id);;
-		if (!wnd?.rsClient.window) { throw new Error("rs window not found"); }
-		return native.captureWindowMulti(wnd.rsClient.window.handle, settings.captureMode, rects);
-	});
-
-	ipcMain.on("settooltip", (e, text: string) => {
-		let wnd = getManagedAppWindow(e.sender.id);
-		if (!wnd) { throw new Error("api caller not found"); }
-		wnd.activeTooltip = text;
-		fixTooltip();
-	});
-
-	ipcMain.on("overlay", (e, commands: OverlayCommand[]) => {
-		let wnd = getManagedAppWindow(e.sender.id);
-		//TODO errors here are not rethrown in app, just swallow and log them
-		if (!wnd?.rsClient.window) { throw new Error("rs window not found"); }
-		wnd.rsClient.overlayCommands(wnd.appFrameId, commands);
-	});
-}

@@ -101,7 +101,7 @@ function AppFrame(p: {}) {
 				<div className="button" onClick={e => close()} />
 				<div className="button" onClick={e => setMinimized(!minimized)} />
 				<div className="button" onMouseDown={toggleDevTools} />
-				<div className="dragbutton" />
+				<div className="dragbutton" onMouseDown={e => startDrag(e, true, true, true, true)} />
 			</div>
 		</div>
 	);
@@ -121,35 +121,16 @@ function toggleDevTools(e: React.MouseEvent) {
 }
 
 function BorderEl(p: { ver: "top" | "bot" | "", hor: "left" | "right" | "" }) {
-	return <div className={"border"}></div>
+	return <div className={classnames("border", "border-" + p.ver + p.hor)} onMouseDown={e => borderDrag(e, p.ver, p.hor)}></div>
 }
 
-function startDrag(factors: { x: number, y: number, w: number, h: number }) {
-	return function startDrag(starte: React.MouseEvent) {
-		let initial = thiswindow.window.getBounds();
-		starte.preventDefault();
-		starte.stopPropagation();
-		appview!.style.pointerEvents = "none";
-		let startpos = remote.screen.getCursorScreenPoint();
-		let moved = () => {
-			let pos = remote.screen.getCursorScreenPoint();
-			let dx = pos.x - startpos.x;
-			let dy = pos.y - startpos.y;
-			thiswindow.window.setBounds({
-				x: initial.x + dx * factors.x,
-				y:initial.y + dy * factors.y,
-				width: initial.width + dx * factors.w,
-				height: initial.height + dy * factors.h,
-			});
-			thiswindow.windowPin.updateDocking();
-		};
-		let cleanup = () => {
-			window.removeEventListener("mousemove", moved);
-			appview!.style.pointerEvents = "";
-		}
-		window.addEventListener("mousemove", moved);
-		window.addEventListener("mouseup", cleanup, { once: true });
-	}
+function borderDrag(e: React.MouseEvent, ver: "top" | "bot" | "", hor: "left" | "right" | "") {
+	return startDrag(e, hor == "left", ver == "top", hor == "right", ver == "bot");
+}
+
+function startDrag(e: React.MouseEvent, left: boolean, top: boolean, right: boolean, bot: boolean) {
+	e.preventDefault();
+	ipcRenderer.sendSync("dragwindow", left, top, right, bot);
 }
 
 function clickThroughEffect(minimized: boolean, rc: RectLike, rootref: React.MutableRefObject<any>) {

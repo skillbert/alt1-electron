@@ -8,6 +8,10 @@
 * Currently using the Ansi version of windows api's as v8 expects utf8, this will work for ascii but will garble anything outside ascii
 */
 
+bool OSGetMouseState() {
+	return (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+}
+
 OSWindow OSGetActiveWindow() {
 	return OSWindow(GetForegroundWindow());
 }
@@ -257,7 +261,7 @@ struct TrackedEvent {
 	std::vector<std::shared_ptr<WindowsEventHook>> hooks;
 	TrackedEvent(OSWindow wnd, WindowEventType type, Napi::Function cb);
 	//allow move assign
-	TrackedEvent(TrackedEvent&& other) noexcept { 
+	TrackedEvent(TrackedEvent&& other) noexcept {
 		*this = std::move(other);
 	};
 	TrackedEvent& operator=(TrackedEvent&& other) noexcept {
@@ -302,7 +306,7 @@ void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function c
 
 //need this weird function to deal with the possibility of the list being modified from the js callback
 //return true from cond if the handler matches and should be called
-template<typename F,typename COND>
+template<typename F, typename COND>
 void iterateHandlers(COND cond, F tracker) {
 	// This will only call the first 64 matching events in the window handlers list. Probably enough.
 	constexpr size_t max_callbacks = 64;

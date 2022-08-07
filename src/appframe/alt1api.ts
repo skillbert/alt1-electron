@@ -173,6 +173,9 @@ var alt1api: Partial<typeof alt1> = {
 		//TODO check if this actually works
 		window.close();
 	},
+	userResize(left, top, right, bot) {
+		ipcRenderer.sendSync("dragwindow", left, top, right, bot);
+	}
 
 	//TODO
 	// bindFindSubImg: ,
@@ -181,7 +184,6 @@ var alt1api: Partial<typeof alt1> = {
 	// showNotification: ,
 	// setTaskbarProgress: ,
 	// setTitleBarText: ,
-	// userResize: ,
 
 	//no plans to implement
 	// addOCRFont: ,

@@ -16,6 +16,7 @@ export var native: {
 	getClientBounds: (wnd: BigInt) => Rectangle,
 	getWindowTitle: (wnd: BigInt) => string,
 	setWindowParent: (wnd: BigInt, parent: BigInt) => void,
+	getMouseState: () => boolean,
 
 	newWindowListener: <T extends keyof windowEvents>(wnd: BigInt, type: T, cb: windowEvents[T]) => void,
 	removeWindowListener: <T extends keyof windowEvents>(wnd: BigInt, type: T, cb: windowEvents[T]) => void,
@@ -159,11 +160,11 @@ export class OSWindowPin extends TypedEmitter<OSWindowPinEvents>{
 			parentbounds = parentbounds || this.parent.getBounds();
 			let x = (this.pinhor == "left" ? parentbounds.x + this.wndhordist : parentbounds.x + parentbounds.width - this.wndhordist - this.wndwidth);
 			let y = (this.pinver == "top" ? parentbounds.y + this.wndverdist : parentbounds.y + parentbounds.height - this.wndverdist - this.wndheight);
-			this.window.setBounds({x: x, y: y, width: this.wndwidth, height: this.wndheight});
+			this.window.setBounds({ x: x, y: y, width: this.wndwidth, height: this.wndheight });
 		}
 		if (this.dockmode == "cover") {
 			let bounds = this.parent.getClientBounds();
-			this.window.setBounds({x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height});
+			this.window.setBounds({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height });
 		}
 	}
 	@boundMethod

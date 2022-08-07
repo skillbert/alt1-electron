@@ -79,6 +79,11 @@ void OSCaptureMulti(OSWindow wnd, CaptureMode mode, vector<CaptureRect> rects, N
  */
 OSWindow OSGetActiveWindow();
 
+/**
+ * Returns true when the left/main mouse button is down, even in another process and regardless of message pump state
+ */
+bool OSGetMouseState();
+
 
 enum class WindowEventType { Move, Close, Show, Click };
 const std::map<std::string, WindowEventType> windowEventTypes = {
