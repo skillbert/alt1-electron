@@ -582,10 +582,12 @@ void RecordThread() {
 					case XCB_BUTTON_PRESS: {
 						xcb_button_press_event_t* event = (xcb_button_press_event_t*)ev;
 						auto button = event->detail;
-						int16_t click_x = event->root_x;
-						int16_t click_y = event->root_y;
-						xcb_window_t hit = HitTest(click_x, click_y);
-						std::cout << "Clicked on window " << hit << std::endl;
+						if (button >= 1 && button <= 3) {
+							int16_t click_x = event->root_x;
+							int16_t click_y = event->root_y;
+							xcb_window_t hit = HitTest(click_x, click_y);
+							std::cout << "Clicked on window " << hit << std::endl;
+						}
 						break;
 					}
 					case XCB_BUTTON_RELEASE: {
