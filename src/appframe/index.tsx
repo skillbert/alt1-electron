@@ -169,8 +169,14 @@ function clickThroughEffect(minimized: boolean, rc: RectLike, rootref: React.Mut
 			}
 		} else {
 			thiswindow.window.setResizable(false);
-			const width = thiswindow.window.getSize()[0];
-			ipcRenderer.send("shape", thiswindow.nativeWindow.handle, [{x: width - 72, y: 0, width: 30, height: 12}, {x: width - 42, y: 0, width: 42, height: 14}]);
+			if (rc) {
+				const [winx, winy] = thiswindow.window.getPosition();
+				const [winw, winh] = thiswindow.window.getSize();
+				ipcRenderer.send("shape", thiswindow.nativeWindow.handle, [{x: rc.x, y: rc.y, width: rc.width, height: rc.height}], 3);
+			} else {
+				const width = thiswindow.window.getSize()[0];
+				ipcRenderer.send("shape", thiswindow.nativeWindow.handle, [{x: width - 72, y: 0, width: 30, height: 12}, {x: width - 42, y: 0, width: 42, height: 14}], 0);
+			}
 		}
 	} else {
 		if (process.platform != "linux") {

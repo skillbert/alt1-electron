@@ -88,12 +88,13 @@ void SetWindowParent(const Napi::CallbackInfo& info) {
 
 void SetWindowShape(const Napi::CallbackInfo& info) {
 	auto arr = info[1].As<Napi::Array>();
+	uint8_t op = static_cast<uint8_t>(info[2].As<Napi::Number>().Int32Value());
 	std::vector<JSRectangle> rects;
 	rects.reserve(arr.Length());
 	for(uint32_t i = 0; i < arr.Length(); i++) {
 		rects.push_back(JSRectangle::FromJsValue(arr[i]));
 	}
-	OSSetWindowShape(OSWindow::FromJsValue(info[0]), rects);
+	OSSetWindowShape(OSWindow::FromJsValue(info[0]), rects, op);
 }
 
 void UnsetWindowShape(const Napi::CallbackInfo& info) { OSUnsetWindowShape(OSWindow::FromJsValue(info[0])); }

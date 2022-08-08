@@ -265,7 +265,8 @@ void IterateEvents(COND cond, F callback) {
 	condvars.clear();
 }
 
-void OSSetWindowShape(OSWindow window, std::vector<JSRectangle> rects) {
+void OSSetWindowShape(OSWindow window, std::vector<JSRectangle> rects, uint8_t op) {
+	OSUnsetWindowShape(window);
 	std::vector<xcb_rectangle_t> xrects;
 	xrects.reserve(rects.size());
 	for(size_t i = 0; i < rects.size(); i += 1) {
@@ -276,11 +277,14 @@ void OSSetWindowShape(OSWindow window, std::vector<JSRectangle> rects) {
 		rect.height = rects[i].height;
 		xrects.push_back(rect);
 	}
-	xcb_shape_rectangles(connection, 0, 0, 0, window.handle, 0, 0, xrects.size(), xrects.data());
+	uint8_t ordering = 0;
+	if (xrects.len() < 2) ordering = 3;
+	xcb_shape_rectangles(connection, op, 0, ordering, window.handle, 0, 0, xrects.size(), xrects.data());
 	xcb_flush(connection);
 }
 
 void OSUnsetWindowShape(OSWindow window) {
+	ensureConnection();
 	xcb_shape_mask(connection, 0, 0, window.handle, 0, 0, 0);
 }
 

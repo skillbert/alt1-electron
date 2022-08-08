@@ -102,8 +102,9 @@ void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function c
 /**
  * Defines which region of a window can be clicked
  * Implemented only on X11 Linux as a replacement for electron's setIgnoreMouseEvents()
+ * Op: 0=Set, 1=Union, 2=Intersect, 3=Subtract, 4=Invert - see Chapter 3 https://www.x.org/releases/X11R7.7/doc/xextproto/shape.html
  */
-void OSSetWindowShape(OSWindow wnd, vector<JSRectangle> rects);
+void OSSetWindowShape(OSWindow wnd, vector<JSRectangle> rects, uint8_t op);
 
 /**
  * Sets a window's clickable region back to default after calling OSSetWindowShape

@@ -336,8 +336,8 @@ function initIpcApi() {
 		wnd.rsClient.overlayCommands(wnd.appFrameId, commands);
 	});
 
-	ipcMain.on("shape", (e, wnd: BigInt, rects: Rectangle[]) => {
-		native.setWindowShape(wnd, rects);
+	ipcMain.on("shape", (e, wnd: BigInt, rects: Rectangle[], op: number) => {
+		native.setWindowShape(wnd, rects, op);
 	});
 
 	ipcMain.on("unshape", (e, wnd: BigInt) => {
