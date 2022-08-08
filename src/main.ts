@@ -317,7 +317,7 @@ function initIpcApi() {
 	});
 
 	ipcMain.handle("capturemulti", (e, rects: { [key: string]: Rectangle }) => {
-		let wnd = getManagedAppWindow(e.sender.id);;
+		let wnd = getManagedAppWindow(e.sender.id);
 		if (!wnd?.rsClient.window) { throw new Error("rs window not found"); }
 		return native.captureWindowMulti(wnd.rsClient.window.handle, settings.captureMode, rects);
 	});
@@ -334,5 +334,13 @@ function initIpcApi() {
 		//TODO errors here are not rethrown in app, just swallow and log them
 		if (!wnd?.rsClient.window) { throw new Error("rs window not found"); }
 		wnd.rsClient.overlayCommands(wnd.appFrameId, commands);
+	});
+
+	ipcMain.on("shape", (e, wnd: BigInt, rects: Rectangle[]) => {
+		native.setWindowShape(wnd, rects);
+	});
+
+	ipcMain.on("unshape", (e, wnd: BigInt) => {
+		native.unsetWindowShape(wnd);
 	});
 }

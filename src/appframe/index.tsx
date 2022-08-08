@@ -4,7 +4,6 @@ import { useState, useLayoutEffect, useRef } from "react";
 import { render } from "react-dom";
 import { ipcRenderer, WebContents } from "electron";
 import * as remote from "@electron/remote";
-import classnames from "classnames";
 import type { RectLike } from "@alt1/base";
 
 import "./style.scss";
@@ -169,9 +168,16 @@ function clickThroughEffect(minimized: boolean, rc: RectLike, rootref: React.Mut
 				root.removeEventListener("mouseleave", handler);
 			}
 		} else {
-			// TODO: click-through on Linux using Shape API
+			thiswindow.window.setResizable(false);
+			const width = thiswindow.window.getSize()[0];
+			ipcRenderer.send("shape", thiswindow.nativeWindow.handle, [{x: width - 72, y: 0, width: 30, height: 12}, {x: width - 42, y: 0, width: 42, height: 14}]);
+		}
+	} else {
+		if (process.platform != "linux") {
 			thiswindow.window.setIgnoreMouseEvents(false);
+		} else {
+			ipcRenderer.send("unshape", thiswindow.nativeWindow.handle);
+			thiswindow.window.setResizable(true);
 		}
 	}
-	thiswindow.window.setIgnoreMouseEvents(false);
 }
