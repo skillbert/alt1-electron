@@ -144,7 +144,10 @@ class ManagedWindow {
 }
 
 function drawTray() {
-	tray = new Tray(alt1icon);
+	if (!tray) {
+		tray = new Tray(alt1icon);
+		tray.on("click", e => tray!.popUpContextMenu());
+	}
 	tray.setToolTip("Alt1 Lite");
 	let menu: MenuItemConstructorOptions[] = [];
 	for (let app of settings.bookmarks) {
