@@ -56,7 +56,7 @@ JSRectangle OSWindow::GetClientBounds() {
 		return JSRectangle();
 	}
 	error = NULL;
-	xcb_translate_coordinates_cookie_t tcookie = xcb_translate_coordinates(connection, this->handle, rootWindow, geometry->x, geometry->y);
+	xcb_translate_coordinates_cookie_t tcookie = xcb_translate_coordinates(connection, this->handle, rootWindow, 0, 0);
 	xcb_translate_coordinates_reply_t* translation = xcb_translate_coordinates_reply(connection, tcookie, &error);
 	if (error != NULL) {
 		free(error);
