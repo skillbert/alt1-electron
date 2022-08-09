@@ -278,7 +278,7 @@ void OSSetWindowShape(OSWindow window, std::vector<JSRectangle> rects, uint8_t o
 		xrects.push_back(rect);
 	}
 	uint8_t ordering = 0;
-	if (xrects.len() < 2) ordering = 3;
+	if (xrects.size() < 2) ordering = 3;
 	xcb_shape_rectangles(connection, op, 0, ordering, window.handle, 0, 0, xrects.size(), xrects.data());
 	xcb_flush(connection);
 }
