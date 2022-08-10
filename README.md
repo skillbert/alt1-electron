@@ -36,7 +36,7 @@ npm run ui
 ### Debian/Ubuntu (apt)
 
 ```console
-# apt install pkg-config libxcb-dev libxcb-shm-dev libxcb-composite-dev libxcb-ewmh-dev libprocps-dev
+# apt install pkg-config libxcb-dev libxcb-shm-dev libxcb-composite-dev libxcb-ewmh-dev libxcb-record-dev libxcb-shape-dev libprocps-dev
 ```
 
 ### Gentoo (portage)

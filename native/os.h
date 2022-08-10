@@ -98,3 +98,9 @@ void OSNewWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb);
  * Remove an event listener, wnd, type and cb must match
  */
 void OSRemoveWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb);
+
+/**
+ * Defines which region of a window can be clicked
+ * Implemented only on X11 Linux as a replacement for electron's setIgnoreMouseEvents()
+ */
+void OSSetWindowShape(OSWindow wnd, vector<JSRectangle> rects);

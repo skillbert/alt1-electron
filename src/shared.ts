@@ -6,7 +6,7 @@ export type Rectangle = { x: number, y: number, width: number, height: number };
 export type RsClientState = {
 	clientRect: Rectangle,
 	active: boolean,
-	lastBlurTime: number,
+	lastActiveTime: number,
 	ping: number,
 	scaling: number,
 	captureMode: CaptureMode

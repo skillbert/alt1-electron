@@ -62,6 +62,8 @@
 						'<!@(<(pkg-config) --cflags xcb-ewmh)',
 						'<!@(<(pkg-config) --cflags xcb-shm)',
 						'<!@(<(pkg-config) --cflags xcb-composite)',
+						'<!@(<(pkg-config) --cflags xcb-record)',
+						'<!@(<(pkg-config) --cflags xcb-shape)',
 						'<!@(<(pkg-config) --cflags libprocps)'
 					],
 					'ldflags': [
@@ -69,6 +71,8 @@
 						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb-ewmh)',
 						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb-shm)',
 						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb-composite)',
+						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb-record)',
+						'<!@(<(pkg-config) --libs-only-L --libs-only-other xcb-shape)',
 						'<!@(<(pkg-config) --libs-only-L --libs-only-other libprocps)'
 					],
 					'libraries': [
@@ -76,6 +80,8 @@
 						'<!@(<(pkg-config) --libs-only-l xcb-ewmh)',
 						'<!@(<(pkg-config) --libs-only-l xcb-shm)',
 						'<!@(<(pkg-config) --libs-only-l xcb-composite)',
+						'<!@(<(pkg-config) --libs-only-l xcb-record)',
+						'<!@(<(pkg-config) --libs-only-l xcb-shape)',
 						'<!@(<(pkg-config) --libs-only-l libprocps)'
 					],
 					"cflags_cc": [ "-std=c++17" ],
