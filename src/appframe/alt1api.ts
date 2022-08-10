@@ -211,12 +211,12 @@ function subImageData(img: FlatImageData, x: number, y: number, w: number, h: nu
 }
 
 let getters: PropertyDescriptorMap = {
-	rsX: { get() { return getRsInfo().clientRect.x } },
-	rsY: { get() { return getRsInfo().clientRect.y } },
-	rsWidth: { get() { return getRsInfo().clientRect.width } },
-	rsHeight: { get() { return getRsInfo().clientRect.height } },
-	rsActive: { get() { return getRsInfo().active } },
-	rsLastActive: { get() { return (getRsInfo().active ? 0 : Date.now() - getRsInfo().lastBlurTime); } },
+	rsX: { get() { return getRsInfo().clientRect.x; } },
+	rsY: { get() { return getRsInfo().clientRect.y; } },
+	rsWidth: { get() { return getRsInfo().clientRect.width; } },
+	rsHeight: { get() { return getRsInfo().clientRect.height; } },
+	rsActive: { get() { return getRsInfo().active; } },
+	rsLastActive: { get() { return Date.now() - getRsInfo().lastActiveTime; } },
 	rsPing: { get() { return getRsInfo().ping; } },
 	rsScaling: { get() { return getRsInfo().scaling; } },
 	rsLinked: { get() { return true; } }, //can no longer open apps without rs

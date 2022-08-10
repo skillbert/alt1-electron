@@ -114,7 +114,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 	overlayWindow: { browser: BrowserWindow, pin: OSWindowPin | null, stalledOverlay: { frameid: number, cmd: OverlayCommand[] }[] } | null;
 	activeRightclick: ActiveRightclick | null = null;
 	isActive = false;
-	lastBlurTime = 0;
+	lastActiveTime = 0;
 
 	constructor(rswindow: OSWindow) {
 		super();
@@ -151,6 +151,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 
 	@boundMethod
 	async clientClicked() {
+		this.lastActiveTime = Date.now();
 		if (this.activeRightclick) {
 			this.activeRightclick.close();
 		}

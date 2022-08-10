@@ -4,6 +4,8 @@
 #include <napi.h>
 #include <proc/readproc.h>
 #include <xcb/composite.h>
+#include <xcb/record.h>
+#include <xcb/shape.h>
 #include <algorithm>
 #include <thread>
 #include <mutex>
@@ -27,16 +29,17 @@ struct TrackedEvent {
 };
 
 std::thread windowThread;
-xcb_window_t windowThreadId;
+std::thread recordThread;
 bool windowThreadExists = false;
 std::vector<TrackedEvent> trackedEvents;
 size_t rsDepth = 0;
 
 std::mutex eventMutex; // Locks the trackedEvents vector
-std::mutex windowThreadMutex; // Locks windowThread and windowThreadId. Should NEVER be locked from inside the window thread
+std::mutex windowThreadMutex; // Locks windowThread. Should NEVER be locked from inside the window thread
 std::mutex rsDepthMutex; // Locks the rsDepth variable
 
 void WindowThread();
+void RecordThread();
 void StartWindowThread();
 
 JSRectangle OSWindow::GetBounds() {
@@ -53,7 +56,7 @@ JSRectangle OSWindow::GetClientBounds() {
 		return JSRectangle();
 	}
 	error = NULL;
-	xcb_translate_coordinates_cookie_t tcookie = xcb_translate_coordinates(connection, this->handle, rootWindow, geometry->x, geometry->y);
+	xcb_translate_coordinates_cookie_t tcookie = xcb_translate_coordinates(connection, this->handle, rootWindow, 0, 0);
 	xcb_translate_coordinates_reply_t* translation = xcb_translate_coordinates_reply(connection, tcookie, &error);
 	if (error != NULL) {
 		free(error);
@@ -117,6 +120,7 @@ OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
 }
 
 bool IsRsWindow(const xcb_window_t window) {
+	ensureConnection();
 	constexpr uint32_t long_length = 64; // Any length higher than 2x+3 of the longest string we may match is fine
 	// Check window class (WM_CLASS property); this is set by the application controlling the window
 	// Also check WM_TRANSIENT_FOR is not set, this will be set on things like popups
@@ -261,12 +265,46 @@ void IterateEvents(COND cond, F callback) {
 	condvars.clear();
 }
 
+void OSSetWindowShape(OSWindow window, std::vector<JSRectangle> rects) {
+	std::vector<xcb_rectangle_t> xrects;
+	xrects.reserve(rects.size());
+	for (size_t i = 0; i < rects.size(); i += 1) {
+		xcb_rectangle_t rect;
+		rect.x = rects[i].x;
+		rect.y = rects[i].y;
+		rect.width = rects[i].width;
+		rect.height = rects[i].height;
+		xrects.push_back(rect);
+	}
+	uint8_t ordering = 0;
+	if (xrects.size() < 2) ordering = 3;
+	xcb_shape_rectangles(connection, XCB_SHAPE_SO_SET, 0, ordering, window.handle, 0, 0, xrects.size(), xrects.data());
+
+	//send an expose event to trigger a repaint
+	xcb_expose_event_t expose = {};
+	expose.response_type = XCB_EXPOSE;
+	expose.x = 0;
+	expose.y = 0;
+	expose.width = 5000;
+	expose.height = 5000;
+	expose.window = window.handle;
+	expose.count = 0;
+	xcb_send_event(connection, true, window.handle, XCB_EVENT_MASK_EXPOSURE, (char*)(void*)&expose);
+	xcb_flush(connection);
+}
+
 
 void OSNewWindowListener(OSWindow window, WindowEventType type, Napi::Function callback) {
 	auto event = TrackedEvent(window.handle, type, callback);
+
+	// If this is a new window, request all its events from X server
+	eventMutex.lock();
+	if (window.handle != 0 && std::find_if(trackedEvents.begin(), trackedEvents.end(), [window](TrackedEvent& e) {return e.window == window.handle;}) == trackedEvents.end()) {
+		constexpr uint32_t values[] = { XCB_EVENT_MASK_STRUCTURE_NOTIFY };
+		xcb_change_window_attributes(connection, window.handle, XCB_CW_EVENT_MASK, values);
+	}
 	
 	// Add the event
-	eventMutex.lock();
 	trackedEvents.push_back(std::move(event));
 	eventMutex.unlock();
 
@@ -276,6 +314,14 @@ void OSNewWindowListener(OSWindow window, WindowEventType type, Napi::Function c
 
 void OSRemoveWindowListener(OSWindow window, WindowEventType type, Napi::Function callback) {
 	eventMutex.lock();
+
+	// If there are no more tracked events for this window, request X server to stop sending any events about it
+	if (window.handle != 0 && std::find_if(trackedEvents.begin(), trackedEvents.end(), [window](TrackedEvent& e) {return e.window == window.handle;}) == trackedEvents.end()) {
+		constexpr uint32_t values[] = { XCB_NONE };
+		xcb_change_window_attributes_checked(connection, window.handle, XCB_CW_EVENT_MASK, values);
+	}
+
+	bool wait = trackedEvents.size() != 0;
 
 	// Remove any matching events
 	trackedEvents.erase(
@@ -293,18 +339,16 @@ void OSRemoveWindowListener(OSWindow window, WindowEventType type, Napi::Functio
 		trackedEvents.end()
 	);
 
-	bool wait = trackedEvents.size() == 0;
+	wait &= trackedEvents.size() == 0;
 	eventMutex.unlock();
 
 	// If the window thread has nothing left to do, send it a wakeup, then wait for it to exit
 	if (wait) {
-		xcb_expose_event_t event;
-		event.response_type = XCB_EXPOSE;
-		event.count = 0;
-		event.window = windowThreadId;
-		xcb_send_event(connection, false, windowThreadId, XCB_EVENT_MASK_EXPOSURE, (const char*)(&event));
+		xcb_disconnect(connection);
 		xcb_flush(connection);
 		windowThread.join();
+		recordThread.join();
+		connection = NULL;
 	}
 }
 
@@ -321,12 +365,7 @@ void StartWindowThread() {
 	if (!windowThreadExists) {
 		windowThreadExists = true;
 		windowThread = std::thread(WindowThread);
-
-		windowThreadId = xcb_generate_id(connection);
-		std::cout << "native: starting window thread: id " << windowThreadId << std::endl;
-		constexpr uint32_t values[] = { XCB_EVENT_MASK_EXPOSURE };
-		xcb_create_window(connection, XCB_COPY_FROM_PARENT, windowThreadId, rootWindow, 0, 0, 1, 1, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT, XCB_COPY_FROM_PARENT, XCB_CW_EVENT_MASK, values);
-		xcb_flush(connection);
+		recordThread = std::thread(RecordThread);
 	}
 	windowThreadMutex.unlock();
 }
@@ -431,13 +470,183 @@ void WindowThread() {
 			}
 			free(event);
 		} else {
-			std::cout << "native: window thread encountered an error" << std::endl;
+			// Fatal error - probably because the application is stopping and we need to return now
 			break;
 		}
 	}
-	windowThreadMutex.lock();
-	xcb_destroy_window(connection, windowThreadId);
+
 	windowThreadExists = false;
 	std::cout << "native: window thread exiting" << std::endl;
-	windowThreadMutex.unlock();
+}
+
+void HitTestRecursively(xcb_window_t window, int16_t x, int16_t y, int16_t offset_x, int16_t offset_y, xcb_window_t& out_window) {
+	xcb_query_tree_cookie_t cookie = xcb_query_tree(connection, window);
+	xcb_query_tree_reply_t* reply = xcb_query_tree_reply(connection, cookie, NULL);
+	if (reply == NULL) {
+		return;
+	}
+
+	xcb_window_t* children = xcb_query_tree_children(reply);
+	xcb_generic_error_t *error;
+
+	for (auto i = 0; i < xcb_query_tree_children_length(reply); i++) {
+		xcb_window_t child = children[i];
+
+		error = NULL;
+		xcb_get_window_attributes_cookie_t acookie = xcb_get_window_attributes(connection, child);
+		xcb_get_window_attributes_reply_t* attributes = xcb_get_window_attributes_reply(connection, acookie, &error);
+		if(error != NULL) {
+			free(error);
+			continue;
+		}
+		auto map_state = attributes->map_state;
+		free(attributes);
+		if (map_state != XCB_MAP_STATE_VIEWABLE) {
+			continue;
+		}
+
+		error = NULL;
+		xcb_get_geometry_cookie_t gcookie = xcb_get_geometry(connection, child);
+		xcb_get_geometry_reply_t* geometry = xcb_get_geometry_reply(connection, gcookie, &error);
+		if (error != NULL) {
+			free(error);
+			continue;
+		}
+		int16_t gx = geometry->x + offset_x;
+		int16_t gy = geometry->y + offset_y;
+		auto gw = geometry->width;
+		auto gh = geometry->height;
+		free(geometry);
+
+		bool hit = true;
+		xcb_shape_get_rectangles_cookie_t rcookie[3] = { // 0=ShapeBounding, 1=ShapeClip, 2=ShapeInput
+			xcb_shape_get_rectangles(connection, child, 0),
+			xcb_shape_get_rectangles(connection, child, 1),
+			xcb_shape_get_rectangles(connection, child, 2),
+		};
+        xcb_shape_get_rectangles_reply_t* rectangles[3] = {
+			xcb_shape_get_rectangles_reply(connection, rcookie[0], NULL),
+			xcb_shape_get_rectangles_reply(connection, rcookie[1], NULL),
+			xcb_shape_get_rectangles_reply(connection, rcookie[2], NULL),
+		};
+        if (rectangles[0] && rectangles[1] && rectangles[2]) {
+			for(auto j = 0; j < 3; j += 1) {
+				bool hit_shape = false;
+				auto rect_count = xcb_shape_get_rectangles_rectangles_length(rectangles[j]);
+				xcb_rectangle_t* rects = xcb_shape_get_rectangles_rectangles(rectangles[j]);
+				for (auto k = 0; k < rect_count; k += 1) {
+					xcb_rectangle_t rect = rects[k];
+					hit_shape |= (x >= (rect.x + gx) && x < (rect.x + rect.width + gx) && y >= (rect.y + gy) && y < (rect.y + rect.height + gy));
+				}
+				hit &= hit_shape;
+			}
+		} else {
+            hit = (x >= gx && x < (gx + gw) && y >= gy && y < (gy + gh));
+        }
+		free(rectangles[0]);
+		free(rectangles[1]);
+		free(rectangles[2]);
+
+		if (hit) {
+			out_window = child;
+			HitTestRecursively(child, x, y, gx, gy, out_window);
+		}
+	}
+
+	free(reply);
+}
+
+// To be called from Record thread. Recursively finds the topmost window which passes hit test at given root coordinates
+xcb_window_t HitTest(int16_t x, int16_t y) {
+	xcb_window_t out = rootWindow;
+	HitTestRecursively(rootWindow, x, y, 0, 0, out);
+	return out;
+}
+
+void RecordThread() {
+	// Second event thread for using the X Record API, which we need to receive mouse button events
+	const xcb_query_extension_reply_t* ext = xcb_get_extension_data(connection, &xcb_record_id);
+	if (!ext) {
+		std::cerr << "native: X record extension is not supported; some features will not work" << std::endl;
+		return;
+	}
+
+	xcb_record_query_version_reply_t *version_reply = xcb_record_query_version_reply(connection, xcb_record_query_version(connection, XCB_RECORD_MAJOR_VERSION, XCB_RECORD_MINOR_VERSION), NULL);
+	if (version_reply) {
+		std::cout << "native: X record extension version: " << version_reply->major_version << "." << version_reply->minor_version << std::endl;
+		free(version_reply);
+	} else {
+		std::cout << "native: X record extension version is unknown" << std::endl;
+	}
+
+	auto id = xcb_generate_id(connection);
+	xcb_record_range_t range;
+	memset(&range, 0, sizeof(xcb_record_range_t));
+	range.device_events.first = XCB_BUTTON_PRESS;
+	range.device_events.last = XCB_BUTTON_RELEASE;
+	xcb_record_client_spec_t client_spec = XCB_RECORD_CS_ALL_CLIENTS;
+	xcb_void_cookie_t cookie = xcb_record_create_context_checked(connection, id, 0, 1, 1, &client_spec, &range);
+	xcb_generic_error_t* error = xcb_request_check(connection, cookie);
+	if (error) {
+		std::cout << "native: couldn't setup X record: xcb_record_create_context_checked returned " << (int)error->error_code << "; some features will not work" << std::endl;
+		free(error);
+		return;
+	}
+
+	auto rec_connection = xcb_connect(NULL, NULL);
+	if (xcb_connection_has_error(rec_connection)) {
+		std::cout << "native: couldn't start record thread connection; some features will not work" << std::endl;
+		return;
+	}
+
+	// xcb-record event loop
+	xcb_record_enable_context_cookie_t cookie2 = xcb_record_enable_context(rec_connection, id);
+	while (WindowThreadShouldRun()) {
+		xcb_record_enable_context_reply_t* reply = xcb_record_enable_context_reply(rec_connection, cookie2, NULL);
+		if (!reply) {
+			std::cout << "native: error in xcb_record_enable_context_reply" << std::endl;
+			continue;
+		}
+		if (reply->client_swapped) {
+			std::cout << "native: unsupported setting client_swapped; please report this error" << std::endl;
+			break;
+		}
+
+		// 0 is XRecordFromServer; we also receive 4 (XRecordStartOfData) at the start of execution, and
+		// 5 (XRecordEndOfData) when we invalidate the main connection, which works as this thread's end-wakeup
+		if (reply->category == 0) {
+			uint8_t* data = xcb_record_enable_context_data(reply);
+			int data_len = xcb_record_enable_context_data_length(reply);
+			if (data_len == sizeof(xcb_button_press_event_t)) {
+				xcb_generic_event_t* ev = (xcb_generic_event_t*)data;
+				switch (ev->response_type) {
+					case XCB_BUTTON_PRESS: {
+						xcb_button_press_event_t* event = (xcb_button_press_event_t*)ev;
+						auto button = event->detail;
+						if (button >= 1 && button <= 3) {
+							int16_t click_x = event->root_x;
+							int16_t click_y = event->root_y;
+							xcb_window_t hit = HitTest(click_x, click_y);
+							IterateEvents(
+								[hit](const TrackedEvent& e){return e.type == WindowEventType::Click && e.window == hit;},
+								[](Napi::Env env, Napi::Function callback){callback.Call({});}
+							);
+						}
+						break;
+					}
+					case XCB_BUTTON_RELEASE: {
+						// Mouse button released - may be useful in future?
+						break;
+					}
+				}
+			}
+		}
+		free(reply);
+	}
+
+	xcb_record_disable_context(rec_connection, id);
+	xcb_record_free_context(rec_connection, id);
+	xcb_flush(rec_connection);
+	xcb_disconnect(rec_connection);
+	std::cout << "native: record thread exiting" << std::endl;
 }

@@ -21,7 +21,29 @@ npm run ui
 ```
 
 ## Linux dependencies
-pkg-config libxcb-dev libxcb-shm-dev libxcb-composite-dev libxcb-ewmh-dev libprocps-dev
+
+- [libxcb](https://xcb.freedesktop.org/) with the Composite and SHM extensions
+- [libxcb-wm](https://gitlab.freedesktop.org/xorg/lib/libxcb-wm)
+- [pkg-config](https://www.freedesktop.org/wiki/Software/pkg-config/)
+- [procps](http://procps-ng.sourceforge.net/)
+
+### Arch (pacman)
+
+```console
+# pacman -S pkg-config libxcb xcb-util-wm procps-ng
+```
+
+### Debian/Ubuntu (apt)
+
+```console
+# apt install pkg-config libxcb-dev libxcb-shm-dev libxcb-composite-dev libxcb-ewmh-dev libxcb-record-dev libxcb-shape-dev libprocps-dev
+```
+
+### Gentoo (portage)
+
+```console
+# emerge --ask --noreplace dev-util/pkgconf x11-libs/libxcb x11-libs/xcb-util-wm sys-process/procps
+```
 
 # Why rewrite?
 

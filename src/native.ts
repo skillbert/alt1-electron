@@ -17,6 +17,7 @@ export var native: {
 	getWindowTitle: (wnd: BigInt) => string,
 	setWindowParent: (wnd: BigInt, parent: BigInt) => void,
 	getMouseState: () => boolean,
+	setWindowShape: (wnd: BigInt, rects: Rectangle[]) => void,
 
 	newWindowListener: <T extends keyof windowEvents>(wnd: BigInt, type: T, cb: windowEvents[T]) => void,
 	removeWindowListener: <T extends keyof windowEvents>(wnd: BigInt, type: T, cb: windowEvents[T]) => void,
