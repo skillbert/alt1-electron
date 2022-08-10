@@ -87,13 +87,17 @@ void SetWindowParent(const Napi::CallbackInfo& info) {
 }
 
 void SetWindowShape(const Napi::CallbackInfo& info) {
+#ifdef OS_LINUX
 	auto arr = info[1].As<Napi::Array>();
 	std::vector<JSRectangle> rects;
 	rects.reserve(arr.Length());
-	for(uint32_t i = 0; i < arr.Length(); i++) {
+	for (uint32_t i = 0; i < arr.Length(); i++) {
 		rects.push_back(JSRectangle::FromJsValue(arr[i]));
 	}
 	OSSetWindowShape(OSWindow::FromJsValue(info[0]), rects);
+#else
+	throw Napi::Error::New(info.Env(), "SetWindowShape is not implemented on this operating system");
+#endif
 }
 
 void NewWindowListener(const Napi::CallbackInfo& info) {
