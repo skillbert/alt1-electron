@@ -247,4 +247,8 @@ export function initIpcApi(ipcMain: IpcMain) {
 		let wnd = expectAppWindow(e);
 		startDrag(wnd, left, top, right, bot);
 	}));
+
+	ipcMain.on("shape", syncwrap((e, wnd: BigInt, rects: Rectangle[]) => {
+		native.setWindowShape(wnd, rects);
+	}));
 }
