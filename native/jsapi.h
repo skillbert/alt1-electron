@@ -80,7 +80,7 @@ Napi::Value JSGetActiveWindow(const Napi::CallbackInfo& info) { return OSGetActi
 Napi::Value GetWindowBounds(const Napi::CallbackInfo& info) { return OSWindow::FromJsValue(info[0]).GetBounds().ToJs(info.Env()); }
 Napi::Value GetClientBounds(const Napi::CallbackInfo& info) { return OSWindow::FromJsValue(info[0]).GetClientBounds().ToJs(info.Env()); }
 Napi::Value GetWindowTitle(const Napi::CallbackInfo& info) { return Napi::String::New(info.Env(), OSWindow::FromJsValue(info[0]).GetTitle()); }
-Napi::Value GetMouseState(const Napi::CallbackInfo& info) { return Napi::Number::New(info.Env(), OSGetMouseState()); }
+Napi::Value GetMouseState(const Napi::CallbackInfo& info) { return Napi::Boolean::New(info.Env(), OSGetMouseState()); }
 
 void SetWindowParent(const Napi::CallbackInfo& info) {
 	auto wnd = OSWindow::FromJsValue(info[0]);

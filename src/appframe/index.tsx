@@ -145,24 +145,29 @@ function subtractRects(rect: RectLike, sub: RectLike) {
 
 function clickThroughEffect(minimized: boolean, rc: RectLike, root: HTMLElement, buttonroot: HTMLElement, gridel: HTMLDivElement) {
 	if (!buttonroot || !root || !gridel) { return; }
+
+	//visual transparency
+	gridel.style.display = (minimized ? "none" : "");
+	if (rc) {
+		//TODO handle window scaling, the coords are in window client area pixel coords
+		//This method is current broken in electron but works in browser? maybe need update
+		// let path = "";
+		// //path around entire window
+		// path += `M0 0 H${window.innerWidth} V${window.innerHeight} H0 Z `;
+		// //second path around the rightclick area this erases it because of rule evenodd
+		// path += `M${rightclickArea.x} ${rightclickArea.y} h${rightclickArea.width} v${rightclickArea.height} h${-rightclickArea.width} Z`;
+		// appstyle.clipPath = `path(evenodd,"${path}")`;
+		//kinda hacky this way with a 0 width line running through the clickable area but it works
+		let path = "";
+		path += `0 0, ${window.innerWidth}px 0, ${window.innerWidth}px ${window.innerHeight}px, 0 ${window.innerHeight}px,0 0,`;
+		path += `${rc.x}px ${rc.y}px,${rc.x + rc.width}px ${rc.y}px, ${rc.x + rc.width}px ${rc.y + rc.height}px, ${rc.x}px ${rc.y + rc.height}px, ${rc.x}px ${rc.y}px`;
+		root.style.clipPath = `polygon(evenodd,${path})`;
+	} else {
+		root.style.clipPath = "";
+	}
+
+	//mouse events
 	if (process.platform != "linux") {
-		let clippath = "";
-		if (rc) {
-			//TODO handle window scaling, the coords are in window client area pixel coords
-			//This method is current broken in electron but works in browser? maybe need update
-			// let path = "";
-			// //path around entire window
-			// path += `M0 0 H${window.innerWidth} V${window.innerHeight} H0 Z `;
-			// //second path around the rightclick area this erases it because of rule evenodd
-			// path += `M${rightclickArea.x} ${rightclickArea.y} h${rightclickArea.width} v${rightclickArea.height} h${-rightclickArea.width} Z`;
-			// appstyle.clipPath = `path(evenodd,"${path}")`;
-			//kinda hacky this way with a 0 width line running through the clickable area but it works
-			let path = "";
-			path += `0 0, ${window.innerWidth}px 0, ${window.innerWidth}px ${window.innerHeight}px, 0 ${window.innerHeight}px,0 0,`;
-			path += `${rc.x}px ${rc.y}px,${rc.x + rc.width}px ${rc.y}px, ${rc.x + rc.width}px ${rc.y + rc.height}px, ${rc.x}px ${rc.y + rc.height}px, ${rc.x}px ${rc.y}px`;
-			clippath = `polygon(evenodd,${path})`;
-		}
-		gridel.style.display = (minimized ? "none" : "");
 		if (minimized || rc) {
 			//TODO check if this actually works when element is hidden while being hovered
 			let currenthover = root.matches(":hover");
@@ -170,7 +175,6 @@ function clickThroughEffect(minimized: boolean, rc: RectLike, root: HTMLElement,
 			let handler = (e: MouseEvent) => {
 				thiswindow.window.setIgnoreMouseEvents(e.type == "mouseleave");
 			};
-			root.style.clipPath = clippath;
 			root.addEventListener("mouseenter", handler);
 			root.addEventListener("mouseleave", handler);
 			return () => {
@@ -179,12 +183,10 @@ function clickThroughEffect(minimized: boolean, rc: RectLike, root: HTMLElement,
 			}
 		} else {
 			thiswindow.window.setIgnoreMouseEvents(false);
-			root.style.clipPath = "";
 		}
 	} else {
 		const fullwndrect = { x: 0, y: 0, width: 5000, height: 5000 };
 		if (minimized || rc) {
-			thiswindow.window.setResizable(false);
 			let btnrects: RectLike[] = [];
 			if (minimized) {
 				for (let i = 0; i < buttonroot.children.length; i++) {
@@ -202,7 +204,6 @@ function clickThroughEffect(minimized: boolean, rc: RectLike, root: HTMLElement,
 			if (btnrects.length == 0) { btnrects.push({ x: 0, y: 0, width: 1, height: 1 }); }
 			ipcRenderer.send("shape", thiswindow.nativeWindow.handle, btnrects);
 		} else {
-			thiswindow.window.setResizable(true);
 			//need to set it to an actual shape or graphics won't update
 			ipcRenderer.send("shape", thiswindow.nativeWindow.handle, [fullwndrect]);
 		}

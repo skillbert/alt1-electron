@@ -103,7 +103,6 @@ function startDrag(wnd: ManagedWindow, left: boolean, top: boolean, right: boole
 
 	let tick = () => {
 		//can't rely on any window events for this since were crossing like 5 processes and 23 threads
-		console.log(native.getMouseState());
 		if (!native.getMouseState()) {
 			clearInterval(interval);
 			return;
