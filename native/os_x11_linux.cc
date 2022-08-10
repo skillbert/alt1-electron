@@ -34,6 +34,9 @@ bool windowThreadExists = false;
 std::vector<TrackedEvent> trackedEvents;
 size_t rsDepth = 0;
 
+//whether the left mouse button on the physical is down regardless of window focus or message pump status
+bool isLeftMouseDown = false;
+
 std::mutex eventMutex; // Locks the trackedEvents vector
 std::mutex windowThreadMutex; // Locks windowThread. Should NEVER be locked from inside the window thread
 std::mutex rsDepthMutex; // Locks the rsDepth variable
@@ -266,6 +269,7 @@ void IterateEvents(COND cond, F callback) {
 }
 
 void OSSetWindowShape(OSWindow window, std::vector<JSRectangle> rects) {
+	ensureConnection();
 	std::vector<xcb_rectangle_t> xrects;
 	xrects.reserve(rects.size());
 	for (size_t i = 0; i < rects.size(); i += 1) {
@@ -278,21 +282,19 @@ void OSSetWindowShape(OSWindow window, std::vector<JSRectangle> rects) {
 	}
 	uint8_t ordering = 0;
 	if (xrects.size() < 2) ordering = 3;
-	xcb_shape_rectangles(connection, XCB_SHAPE_SO_SET, 0, ordering, window.handle, 0, 0, xrects.size(), xrects.data());
-
-	//send an expose event to trigger a repaint
-	xcb_expose_event_t expose = {};
-	expose.response_type = XCB_EXPOSE;
-	expose.x = 0;
-	expose.y = 0;
-	expose.width = 5000;
-	expose.height = 5000;
-	expose.window = window.handle;
-	expose.count = 0;
-	xcb_send_event(connection, true, window.handle, XCB_EVENT_MASK_EXPOSURE, (char*)(void*)&expose);
+	//TODO this 5k x 5k special case is weird, implement separate clear call again?
+	if (rects.size() == 1 && rects[1].width >= 5000 && rects[1].height >= 5000) {
+		xcb_shape_mask(connection, 0, XCB_SHAPE_SK_INPUT, window.handle, 0, 0, 0);
+	}
+	else {
+		xcb_shape_rectangles(connection, XCB_SHAPE_SO_SET, XCB_SHAPE_SK_INPUT, ordering, window.handle, 0, 0, xrects.size(), xrects.data());
+	}
 	xcb_flush(connection);
 }
 
+bool OSGetMouseState() {
+	return isLeftMouseDown;
+}
 
 void OSNewWindowListener(OSWindow window, WindowEventType type, Napi::Function callback) {
 	auto event = TrackedEvent(window.handle, type, callback);
@@ -632,10 +634,17 @@ void RecordThread() {
 								[](Napi::Env env, Napi::Function callback){callback.Call({});}
 							);
 						}
+						if(button == 1){
+							isLeftMouseDown = true;
+						}
 						break;
 					}
 					case XCB_BUTTON_RELEASE: {
-						// Mouse button released - may be useful in future?
+						xcb_button_press_event_t* event = (xcb_button_press_event_t*)ev;
+						auto button = event->detail;
+						if(button == 1){
+							isLeftMouseDown = false;
+						}
 						break;
 					}
 				}

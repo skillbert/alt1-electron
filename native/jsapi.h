@@ -19,7 +19,7 @@ Napi::Value HookWindow(const Napi::CallbackInfo& info) {
 	hookedWindows[wnd] = handle;
 	return Napi::BigInt::New(info.Env(), (uintptr_t)handle);
 #else
-	return Napi::BigInt::New(info.Env(), (uint64_t) 0);
+	return Napi::BigInt::New(info.Env(), (uint64_t)0);
 #endif
 }
 
@@ -80,6 +80,8 @@ Napi::Value JSGetActiveWindow(const Napi::CallbackInfo& info) { return OSGetActi
 Napi::Value GetWindowBounds(const Napi::CallbackInfo& info) { return OSWindow::FromJsValue(info[0]).GetBounds().ToJs(info.Env()); }
 Napi::Value GetClientBounds(const Napi::CallbackInfo& info) { return OSWindow::FromJsValue(info[0]).GetClientBounds().ToJs(info.Env()); }
 Napi::Value GetWindowTitle(const Napi::CallbackInfo& info) { return Napi::String::New(info.Env(), OSWindow::FromJsValue(info[0]).GetTitle()); }
+Napi::Value GetMouseState(const Napi::CallbackInfo& info) { return Napi::Boolean::New(info.Env(), OSGetMouseState()); }
+
 void SetWindowParent(const Napi::CallbackInfo& info) {
 	auto wnd = OSWindow::FromJsValue(info[0]);
 	auto parent = OSWindow::FromJsValue(info[1]);
