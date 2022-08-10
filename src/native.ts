@@ -16,8 +16,7 @@ export var native: {
 	getClientBounds: (wnd: BigInt) => Rectangle,
 	getWindowTitle: (wnd: BigInt) => string,
 	setWindowParent: (wnd: BigInt, parent: BigInt) => void,
-	setWindowShape: (wnd: BigInt, rects: Rectangle[], op: number) => void,
-	unsetWindowShape: (wnd: BigInt) => void,
+	setWindowShape: (wnd: BigInt, rects: Rectangle[]) => void,
 
 	newWindowListener: <T extends keyof windowEvents>(wnd: BigInt, type: T, cb: windowEvents[T]) => void,
 	removeWindowListener: <T extends keyof windowEvents>(wnd: BigInt, type: T, cb: windowEvents[T]) => void,

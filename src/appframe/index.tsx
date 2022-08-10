@@ -20,11 +20,11 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 function AppFrame(p: {}) {
-	let el = useRef(null! as HTMLDivElement);
-
 	let [rightclickArea, setRightclickArea] = useState(null as RectLike | null);
 	let [minimized, setMinimized] = useState(false);
-	let rootref = useRef(null);
+	let gridel = useRef<HTMLDivElement>(null);
+	let rootref = useRef<HTMLDivElement>(null);
+	let buttonroot = useRef<HTMLDivElement>(null);
 
 	//app webview
 	useLayoutEffect(() => {
@@ -37,7 +37,7 @@ function AppFrame(p: {}) {
 		view.src = thiswindow.appConfig.appUrl;
 		//view.webpreferences = "sandbox,contextIsolation=true";
 		view.webpreferences = "sandbox,contextIsolation=false";
-		el.current.appendChild(view);
+		gridel.current!.appendChild(view);
 		view.addEventListener("dom-ready", e => {
 			//TODO is there a better way to get a ref to the frame?
 			thiswindow.appFrameId = view.getWebContentsId();
@@ -64,29 +64,11 @@ function AppFrame(p: {}) {
 
 	//transparent window clickthrough handler
 	//https://github.com/electron/electron/issues/1335
-	useLayoutEffect(clickThroughEffect.bind(null, minimized, rightclickArea, rootref), [minimized, rightclickArea]);
-
-	let appstyle: React.CSSProperties = {};
-	if (rightclickArea) {
-		//TODO handle window scaling, the coords are in window client area pixel coords
-		let rc = rightclickArea;
-		//This method is current broken in electron but works in browser? maybe need update
-		// let path = "";
-		// //path around entire window
-		// path += `M0 0 H${window.innerWidth} V${window.innerHeight} H0 Z `;
-		// //second path around the rightclick area this erases it because of rule evenodd
-		// path += `M${rightclickArea.x} ${rightclickArea.y} h${rightclickArea.width} v${rightclickArea.height} h${-rightclickArea.width} Z`;
-		// appstyle.clipPath = `path(evenodd,"${path}")`;
-		//kinda hacky this way with a 0 width line running through the clickable area but it works
-		let path = "";
-		path += `0 0, ${window.innerWidth}px 0, ${window.innerWidth}px ${window.innerHeight}px, 0 ${window.innerHeight}px,0 0,`;
-		path += `${rc.x}px ${rc.y}px,${rc.x + rc.width}px ${rc.y}px, ${rc.x + rc.width}px ${rc.y + rc.height}px, ${rc.x}px ${rc.y + rc.height}px, ${rc.x}px ${rc.y}px`;
-		appstyle.clipPath = `polygon(evenodd,${path})`;
-	}
+	useLayoutEffect(clickThroughEffect.bind(null, minimized, rightclickArea, rootref.current, buttonroot.current), [minimized, rightclickArea, rootref, buttonroot]);
 
 	return (
-		<div className="approot" style={appstyle} ref={rootref}>
-			<div className="appgrid" ref={el} style={{ display: minimized ? "none" : "", ...appstyle }} >
+		<div className="approot" ref={rootref}>
+			<div className="appgrid" ref={gridel} >
 				<BorderEl ver="top" hor="left" />
 				<BorderEl ver="top" hor="" />
 				<BorderEl ver="top" hor="right" />
@@ -96,7 +78,7 @@ function AppFrame(p: {}) {
 				<BorderEl ver="bot" hor="" />
 				<BorderEl ver="bot" hor="right" />
 			</div>
-			<div className="buttonroot">
+			<div className="buttonroot" ref={buttonroot}>
 				<div className="button" onClick={e => close()} />
 				<div className="button" onClick={e => setMinimized(!minimized)} />
 				<div className="button" onMouseDown={toggleDevTools} />
@@ -151,10 +133,54 @@ function startDrag(factors: { x: number, y: number, w: number, h: number }) {
 	}
 }
 
-function clickThroughEffect(minimized: boolean, rc: RectLike, rootref: React.MutableRefObject<any>) {
-	let root = rootref.current as HTMLElement;
-	if (minimized || rc) {
-		if (process.platform != "linux") {
+function subtractRects(rect: RectLike, sub: RectLike) {
+	let rects: RectLike[] = [];
+	let y1 = rect.y;
+	let y2 = Math.min(rect.y + rect.height, sub.y);
+	//above sub rect
+	if (y2 > y1) {
+		rects.push({ x: rect.x, y: y1, width: rect.width, height: y2 - y1 });
+	}
+	let y3 = Math.min(rect.y + rect.height, sub.y + sub.height);
+	if (y3 > y2) {
+		//left of sub rect
+		if (rect.x < sub.x) {
+			rects.push({ x: rect.x, y: y2, width: Math.min(rect.x + rect.width, sub.x) - rect.x, height: y3 - y2 });
+		}
+		//right of sub rect
+		if (sub.x + sub.width < rect.x + rect.width) {
+			rects.push({ x: sub.x + sub.width, y: y2, width: rect.x + rect.width - sub.x - sub.width, height: y3 - y2 });
+		}
+	}
+	let y4 = rect.y + rect.height;
+	//below sub rect
+	if (y4 > y3) {
+		rects.push({ x: rect.x, y: y3, width: rect.width, height: y4 - y3 });
+	}
+	return rects;
+}
+
+function clickThroughEffect(minimized: boolean, rc: RectLike, root: HTMLElement, buttonroot: HTMLElement, gridel: HTMLDivElement) {
+	if (process.platform != "linux") {
+		if (minimized || rc) {
+			if (rc) {
+				//TODO handle window scaling, the coords are in window client area pixel coords
+				//This method is current broken in electron but works in browser? maybe need update
+				// let path = "";
+				// //path around entire window
+				// path += `M0 0 H${window.innerWidth} V${window.innerHeight} H0 Z `;
+				// //second path around the rightclick area this erases it because of rule evenodd
+				// path += `M${rightclickArea.x} ${rightclickArea.y} h${rightclickArea.width} v${rightclickArea.height} h${-rightclickArea.width} Z`;
+				// appstyle.clipPath = `path(evenodd,"${path}")`;
+				//kinda hacky this way with a 0 width line running through the clickable area but it works
+				let path = "";
+				path += `0 0, ${window.innerWidth}px 0, ${window.innerWidth}px ${window.innerHeight}px, 0 ${window.innerHeight}px,0 0,`;
+				path += `${rc.x}px ${rc.y}px,${rc.x + rc.width}px ${rc.y}px, ${rc.x + rc.width}px ${rc.y + rc.height}px, ${rc.x}px ${rc.y + rc.height}px, ${rc.x}px ${rc.y}px`;
+				root.style.clipPath = `polygon(evenodd,${path})`;
+			}
+			if (minimized) {
+				gridel.style.display = "none";
+			}
 			//TODO check if this actually works when element is hidden while being hovered
 			let currenthover = root.matches(":hover");
 			thiswindow.window.setIgnoreMouseEvents(!currenthover, { forward: true });
@@ -166,24 +192,35 @@ function clickThroughEffect(minimized: boolean, rc: RectLike, rootref: React.Mut
 			return () => {
 				root.removeEventListener("mouseenter", handler);
 				root.removeEventListener("mouseleave", handler);
-			}
-		} else {
-			thiswindow.window.setResizable(false);
-			if (rc) {
-				const [winx, winy] = thiswindow.window.getPosition();
-				const [winw, winh] = thiswindow.window.getSize();
-				ipcRenderer.send("shape", thiswindow.nativeWindow.handle, [{x: rc.x, y: rc.y, width: rc.width, height: rc.height}], 3);
-			} else {
-				const width = thiswindow.window.getSize()[0];
-				ipcRenderer.send("shape", thiswindow.nativeWindow.handle, [{x: width - 72, y: 0, width: 30, height: 12}, {x: width - 42, y: 0, width: 42, height: 14}], 0);
+				thiswindow.window.setIgnoreMouseEvents(false);
+				root.style.clipPath = "";
+				gridel.style.display = "";
 			}
 		}
 	} else {
-		if (process.platform != "linux") {
-			thiswindow.window.setIgnoreMouseEvents(false);
+		const fullwndrect = { x: 0, y: 0, width: 5000, height: 5000 };
+		if (minimized || rc) {
+			thiswindow.window.setResizable(false);
+			let btnrects: RectLike[] = [];
+			if (minimized) {
+				for (let i = 0; i < buttonroot.children.length; i++) {
+					let child = buttonroot.children[i];
+					let rect = child.getBoundingClientRect();
+					btnrects.push({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+				}
+			} else {
+				btnrects.push(fullwndrect);
+			}
+			if (rc) {
+				btnrects = btnrects.flatMap(b => subtractRects(b, rc));
+			}
+			//actually need one pixel or the graphics won't update
+			if (btnrects.length == 0) { btnrects.push({ x: 0, y: 0, width: 1, height: 1 }); }
+			ipcRenderer.send("shape", thiswindow.nativeWindow.handle, btnrects);
 		} else {
-			ipcRenderer.send("unshape", thiswindow.nativeWindow.handle);
 			thiswindow.window.setResizable(true);
+			//need to set it to an actual shape or graphics won't update
+			ipcRenderer.send("shape", thiswindow.nativeWindow.handle, [fullwndrect]);
 		}
 	}
 }

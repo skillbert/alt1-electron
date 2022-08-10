@@ -20,7 +20,6 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
 	exports.Set("setWindowParent", Napi::Function::New(env, SetWindowParent));
 	exports.Set("getActiveWindow", Napi::Function::New(env, JSGetActiveWindow));
 	exports.Set("setWindowShape", Napi::Function::New(env, SetWindowShape));
-	exports.Set("unsetWindowShape", Napi::Function::New(env, UnsetWindowShape));
 
 	exports.Set("newWindowListener", Napi::Function::New(env, NewWindowListener));
 	exports.Set("removeWindowListener", Napi::Function::New(env, RemoveWindowListener));

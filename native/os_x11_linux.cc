@@ -265,11 +265,10 @@ void IterateEvents(COND cond, F callback) {
 	condvars.clear();
 }
 
-void OSSetWindowShape(OSWindow window, std::vector<JSRectangle> rects, uint8_t op) {
-	OSUnsetWindowShape(window);
+void OSSetWindowShape(OSWindow window, std::vector<JSRectangle> rects) {
 	std::vector<xcb_rectangle_t> xrects;
 	xrects.reserve(rects.size());
-	for(size_t i = 0; i < rects.size(); i += 1) {
+	for (size_t i = 0; i < rects.size(); i += 1) {
 		xcb_rectangle_t rect;
 		rect.x = rects[i].x;
 		rect.y = rects[i].y;
@@ -279,13 +278,19 @@ void OSSetWindowShape(OSWindow window, std::vector<JSRectangle> rects, uint8_t o
 	}
 	uint8_t ordering = 0;
 	if (xrects.size() < 2) ordering = 3;
-	xcb_shape_rectangles(connection, op, 0, ordering, window.handle, 0, 0, xrects.size(), xrects.data());
-	xcb_flush(connection);
-}
+	xcb_shape_rectangles(connection, XCB_SHAPE_SO_SET, 0, ordering, window.handle, 0, 0, xrects.size(), xrects.data());
 
-void OSUnsetWindowShape(OSWindow window) {
-	ensureConnection();
-	xcb_shape_mask(connection, 0, 0, window.handle, 0, 0, 0);
+	//send an expose event to trigger a repaint
+	xcb_expose_event_t expose = {};
+	expose.response_type = XCB_EXPOSE;
+	expose.x = 0;
+	expose.y = 0;
+	expose.width = 5000;
+	expose.height = 5000;
+	expose.window = window.handle;
+	expose.count = 0;
+	xcb_send_event(connection, true, window.handle, XCB_EVENT_MASK_EXPOSURE, (char*)(void*)&expose);
+	xcb_flush(connection);
 }
 
 
