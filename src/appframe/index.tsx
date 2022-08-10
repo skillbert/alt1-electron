@@ -64,7 +64,8 @@ function AppFrame(p: {}) {
 
 	//transparent window clickthrough handler
 	//https://github.com/electron/electron/issues/1335
-	useLayoutEffect(clickThroughEffect.bind(null, minimized, rightclickArea, rootref.current, buttonroot.current), [minimized, rightclickArea, rootref, buttonroot]);
+	useLayoutEffect(clickThroughEffect.bind(null, minimized, rightclickArea, rootref.current, buttonroot.current, gridel.current),
+		[minimized, rightclickArea, rootref.current, buttonroot.current, gridel.current]);
 
 	return (
 		<div className="approot" ref={rootref}>
@@ -161,41 +162,42 @@ function subtractRects(rect: RectLike, sub: RectLike) {
 }
 
 function clickThroughEffect(minimized: boolean, rc: RectLike, root: HTMLElement, buttonroot: HTMLElement, gridel: HTMLDivElement) {
+	if (!buttonroot || !root || !gridel) { return; }
 	if (process.platform != "linux") {
+		let clippath = "";
+		if (rc) {
+			//TODO handle window scaling, the coords are in window client area pixel coords
+			//This method is current broken in electron but works in browser? maybe need update
+			// let path = "";
+			// //path around entire window
+			// path += `M0 0 H${window.innerWidth} V${window.innerHeight} H0 Z `;
+			// //second path around the rightclick area this erases it because of rule evenodd
+			// path += `M${rightclickArea.x} ${rightclickArea.y} h${rightclickArea.width} v${rightclickArea.height} h${-rightclickArea.width} Z`;
+			// appstyle.clipPath = `path(evenodd,"${path}")`;
+			//kinda hacky this way with a 0 width line running through the clickable area but it works
+			let path = "";
+			path += `0 0, ${window.innerWidth}px 0, ${window.innerWidth}px ${window.innerHeight}px, 0 ${window.innerHeight}px,0 0,`;
+			path += `${rc.x}px ${rc.y}px,${rc.x + rc.width}px ${rc.y}px, ${rc.x + rc.width}px ${rc.y + rc.height}px, ${rc.x}px ${rc.y + rc.height}px, ${rc.x}px ${rc.y}px`;
+			clippath = `polygon(evenodd,${path})`;
+		}
+		gridel.style.display = (minimized ? "none" : "");
 		if (minimized || rc) {
-			if (rc) {
-				//TODO handle window scaling, the coords are in window client area pixel coords
-				//This method is current broken in electron but works in browser? maybe need update
-				// let path = "";
-				// //path around entire window
-				// path += `M0 0 H${window.innerWidth} V${window.innerHeight} H0 Z `;
-				// //second path around the rightclick area this erases it because of rule evenodd
-				// path += `M${rightclickArea.x} ${rightclickArea.y} h${rightclickArea.width} v${rightclickArea.height} h${-rightclickArea.width} Z`;
-				// appstyle.clipPath = `path(evenodd,"${path}")`;
-				//kinda hacky this way with a 0 width line running through the clickable area but it works
-				let path = "";
-				path += `0 0, ${window.innerWidth}px 0, ${window.innerWidth}px ${window.innerHeight}px, 0 ${window.innerHeight}px,0 0,`;
-				path += `${rc.x}px ${rc.y}px,${rc.x + rc.width}px ${rc.y}px, ${rc.x + rc.width}px ${rc.y + rc.height}px, ${rc.x}px ${rc.y + rc.height}px, ${rc.x}px ${rc.y}px`;
-				root.style.clipPath = `polygon(evenodd,${path})`;
-			}
-			if (minimized) {
-				gridel.style.display = "none";
-			}
 			//TODO check if this actually works when element is hidden while being hovered
 			let currenthover = root.matches(":hover");
-			thiswindow.window.setIgnoreMouseEvents(!currenthover, { forward: true });
+			thiswindow.window.setIgnoreMouseEvents(!currenthover);
 			let handler = (e: MouseEvent) => {
-				thiswindow.window.setIgnoreMouseEvents(e.type == "mouseleave", { forward: true });
+				thiswindow.window.setIgnoreMouseEvents(e.type == "mouseleave");
 			};
+			root.style.clipPath = clippath;
 			root.addEventListener("mouseenter", handler);
 			root.addEventListener("mouseleave", handler);
 			return () => {
 				root.removeEventListener("mouseenter", handler);
 				root.removeEventListener("mouseleave", handler);
-				thiswindow.window.setIgnoreMouseEvents(false);
-				root.style.clipPath = "";
-				gridel.style.display = "";
 			}
+		} else {
+			thiswindow.window.setIgnoreMouseEvents(false);
+			root.style.clipPath = "";
 		}
 	} else {
 		const fullwndrect = { x: 0, y: 0, width: 5000, height: 5000 };
