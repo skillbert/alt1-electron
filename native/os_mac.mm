@@ -4,8 +4,16 @@
 #include "os.h"
 #include "libproc.h"
 
+std::vector<OSWindow> OSGetRsHandles() {
+	std::vector<OSWindow> out;
+	
+	// TODO: Placeholder to allow build. Fill this in.
+
+	return out;
+}
+
 JSRectangle OSWindow::GetBounds() {
-	NSWindow* window = [this->hwnd.wnd window];
+	NSWindow* window = [this->handle.wnd window];
 	NSRect frame = [window frame];
 	int y = [[NSScreen mainScreen] frame].size.height - frame.origin.y - frame.size.height;
 	return JSRectangle(frame.origin.x, y, frame.size.width, frame.size.height);
@@ -15,12 +23,8 @@ JSRectangle OSWindow::GetClientBounds() {
 	return JSRectangle();
 }
 
-int OSWindow::GetPid() {
-	return 0;
-}
-
 bool OSWindow::IsValid() {
-	if (this->hwnd.winid == 0) {
+	if (this->handle.winid == 0) {
 		return false;
 	}
 
@@ -32,15 +36,15 @@ std::string OSWindow::GetTitle() {
 }
 
 Napi::Value OSWindow::ToJS(Napi::Env env) {
-	return Napi::BigInt::New(env, (uint64_t) this->hwnd.winid);
+	return Napi::BigInt::New(env, (uint64_t) this->handle.winid);
 }
 
 bool OSWindow::operator==(const OSWindow& other) const {
-	return memcmp(&this->hwnd, &other.hwnd, sizeof(this->hwnd)) == 0;
+	return memcmp(&this->handle, &other.handle, sizeof(this->handle)) == 0;
 }
 
 bool OSWindow::operator<(const OSWindow& other) const {
-	return memcmp(&this->hwnd, &other.hwnd, sizeof(this->hwnd)) < 0;
+	return memcmp(&this->handle, &other.handle, sizeof(this->handle)) < 0;
 }
 
 OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
@@ -51,6 +55,15 @@ OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
 		Napi::RangeError::New(jsval.Env(), "Invalid handle").ThrowAsJavaScriptException();
 	}
 	return OSWindow(OSRawWindow{.wnd = (NSView*) handleint});
+}
+
+std::string OSGetProcessName(int pid) {
+	char namebuf[255];
+	if (proc_name(pid, namebuf, sizeof(namebuf)) == -1) {
+		throw new std::runtime_error("Unable to get process name");
+	}
+
+	return std::string(namebuf);
 }
 
 std::vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid) {
@@ -119,15 +132,6 @@ void OSCaptureMulti(OSWindow wnd, CaptureMode mode, vector<CaptureRect> rects, N
 	default:
 		throw Napi::RangeError::New(env, "Capture mode not supported");
 	}
-}
-
-std::string OSGetProcessName(int pid) {
-	char namebuf[255];
-	if (proc_name(pid, namebuf, sizeof(namebuf)) == -1) {
-		throw new std::runtime_error("Unable to get process name");
-	}
-
-	return std::string(namebuf);
 }
 
 void OSNewWindowListener(OSWindow wnd, WindowEventType type, Napi::Function cb) {
