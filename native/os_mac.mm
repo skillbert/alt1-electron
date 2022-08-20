@@ -4,23 +4,18 @@
 #include "os.h"
 #include "libproc.h"
 
-std::vector<OSWindow> OSGetRsHandles() {
-	std::vector<OSWindow> out;
-	
-	// TODO: Placeholder to allow build. Fill this in.
-
-	return out;
-}
-
 JSRectangle OSWindow::GetBounds() {
-	NSWindow* window = [this->handle.wnd window];
-	NSRect frame = [window frame];
+	// TODO: This is a placeholder for the real (commented) frame that currently segfaults.
+	//NSRect frame = [[this->handle.wnd window] frame];
+	NSRect frame = [[NSScreen mainScreen] frame];
 	int y = [[NSScreen mainScreen] frame].size.height - frame.origin.y - frame.size.height;
 	return JSRectangle(frame.origin.x, y, frame.size.width, frame.size.height);
 }
 
 JSRectangle OSWindow::GetClientBounds() {
-	return JSRectangle();
+	// TODO: Try to return the full screen for now
+	NSRect frame = [[NSScreen mainScreen] frame];
+	return JSRectangle(frame.origin.x, frame.origin.y, frame.size.width, frame.size.height);
 }
 
 bool OSWindow::IsValid() {
@@ -39,6 +34,13 @@ Napi::Value OSWindow::ToJS(Napi::Env env) {
 	return Napi::BigInt::New(env, (uint64_t) this->handle.winid);
 }
 
+OSWindow OSWindowFromID(const pid_t pid) {
+	return OSWindow(OSRawWindow{
+		.winid = static_cast<uintptr_t>(pid),
+		.wnd = reinterpret_cast<NSView*>(pid)
+	});
+}
+
 bool OSWindow::operator==(const OSWindow& other) const {
 	return memcmp(&this->handle, &other.handle, sizeof(this->handle)) == 0;
 }
@@ -54,7 +56,7 @@ OSWindow OSWindow::FromJsValue(const Napi::Value jsval) {
 	if (!lossless) {
 		Napi::RangeError::New(jsval.Env(), "Invalid handle").ThrowAsJavaScriptException();
 	}
-	return OSWindow(OSRawWindow{.wnd = (NSView*) handleint});
+	return OSWindowFromID(static_cast<pid_t>(handleint));
 }
 
 std::string OSGetProcessName(int pid) {
@@ -66,8 +68,8 @@ std::string OSGetProcessName(int pid) {
 	return std::string(namebuf);
 }
 
-std::vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid) {
-	std::vector<uint32_t> out;
+std::vector<OSWindow> OSGetProcessesByName(std::string name, uint32_t parentpid) {
+	std::vector<OSWindow> out;
 	std::unique_ptr<pid_t[]> buf;
 	int no_proc;
 	if (parentpid == 0) {
@@ -98,11 +100,15 @@ std::vector<uint32_t> OSGetProcessesByName(std::string name, uint32_t parentpid)
 	
 	for (int i = 0; i < no_proc; i++) {
 		if (OSGetProcessName(buf[i]) == name) {
-			out.push_back(buf[i]);
+			out.push_back(OSWindowFromID(buf[i]));
 		}
 	}
 	
 	return out;
+}
+
+std::vector<OSWindow> OSGetRsHandles() {
+	return OSGetProcessesByName("RuneScape", NULL);
 }
 
 OSWindow OSFindMainWindow(unsigned long process_id) {
