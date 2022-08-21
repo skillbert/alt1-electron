@@ -16,19 +16,23 @@ JSRectangle OSWindow::GetBounds() {
 
     CGRect screenBounds;
     CGRectMakeWithDictionaryRepresentation((CFDictionaryRef) CFDictionaryGetValue(windowInfo, kCGWindowBounds), &screenBounds);
-    CGFloat scale = 1.0; // Using the real scale breaks just about all alt1 stuffs
-//    CGFloat scale = findScalingFactor(findScreenForRect(screenBounds));
-    return JSRectangle(static_cast<int>(screenBounds.origin.x * scale), static_cast<int>(screenBounds.origin.y * scale), static_cast<int>(screenBounds.size.width * scale), static_cast<int>(screenBounds.size.height * scale));
+    BOOL isFs = [AOUtil isFullScreen: screenBounds];
+    JSRectangle jbounds(static_cast<int>(screenBounds.origin.x), static_cast<int>(screenBounds.origin.y), static_cast<int>(screenBounds.size.width), static_cast<int>(screenBounds.size.height));
+//    NSLog(@"B: %@ (%d,%d) [%dx%d]", (isFs?@"YES":@"NO"), jbounds.x, jbounds.y, jbounds.width, jbounds.height);
+    return jbounds;
 }
 
 JSRectangle OSWindow::GetClientBounds() {
     CFDictionaryRef windowInfo = [AOUtil findWindow: this->handle.winid];
     CGRect screenBounds;
     CGRectMakeWithDictionaryRepresentation((CFDictionaryRef) CFDictionaryGetValue(windowInfo, kCGWindowBounds), &screenBounds);
-    CGFloat scale = 1.0; // Using the real scale breaks just about all alt1 stuffs
-//    CGFloat scale = findScalingFactor(findScreenForRect(screenBounds));
-    JSRectangle jbounds = JSRectangle(static_cast<int>(screenBounds.origin.x * scale), static_cast<int>(screenBounds.origin.y * scale), static_cast<int>(screenBounds.size.width * scale), static_cast<int>(screenBounds.size.height * scale));
-    NSLog(@"CB: (%d,%d) [%dx%d]", jbounds.x, jbounds.y, jbounds.width, jbounds.height);
+    BOOL isFs = [AOUtil isFullScreen: screenBounds];
+    JSRectangle jbounds(static_cast<int>(screenBounds.origin.x), static_cast<int>(screenBounds.origin.y), static_cast<int>(screenBounds.size.width), static_cast<int>(screenBounds.size.height));
+    if(!isFs) {
+        jbounds.y += TITLE_BAR_HEIGHT;
+        jbounds.height = jbounds.height - TITLE_BAR_HEIGHT;
+    }
+//    NSLog(@"CB: %@ (%d,%d) [%dx%d]", (isFs?@"YES":@"NO"), jbounds.x, jbounds.y, jbounds.width, jbounds.height);
     return jbounds;
 }
 

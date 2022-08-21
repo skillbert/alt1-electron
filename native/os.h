@@ -38,7 +38,7 @@ public:
 	OSWindow(OSRawWindow hnd) : handle(hnd) {}
 	// The bounderies of the window including title bar and borders in screen coordinates
 	JSRectangle GetBounds();
-	// The boundaries of the client area of the window, without any title bar of borders
+	// The boundaries of the client area of the window, without any title bar or borders
 	JSRectangle GetClientBounds();
     // Get the display scaling for this game window
     float OSGetScale();

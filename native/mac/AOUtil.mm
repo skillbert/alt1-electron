@@ -175,6 +175,31 @@ const CFMutableDictionaryRef trackedWindows = CFDictionaryCreateMutable(NULL, 0,
    return [currentApp isEqualTo:frontApp] || [title isCaseInsensitiveLike:@"rs2client"];
 }
 
+
++ (BOOL) isFullScreen:(CGRect) bounds {
+    CGDirectDisplayID *displays = (CGDirectDisplayID *) malloc(sizeof(CGDirectDisplayID) * MAX_DISPLAY_COUNT);
+    uint32_t count = 0;
+    CGError err = CGGetActiveDisplayList(MAX_DISPLAY_COUNT, displays, &count);
+    if (err != kCGErrorSuccess) {
+        printf("error: %d\n", err);
+        return false;
+    }
+    err = CGGetDisplaysWithRect(bounds, MAX_DISPLAY_COUNT, displays, &count);
+    if (err != kCGErrorSuccess) {
+        printf("error: %d\n", err);
+        return false;
+    }
+    if (count > 1) {
+        if (displays) {
+            free(displays);
+        }
+        return false;
+    }
+    CGRect screenBounds = CGDisplayBounds(displays[0]);
+    free(displays);
+    return (bounds.origin.x == screenBounds.origin.x && bounds.origin.y == screenBounds.origin.y && bounds.size.width == screenBounds.size.width && bounds.size.height == screenBounds.size.height);
+}
+
 +(pid_t) focusedPid {
     NSRunningApplication *app = [[NSWorkspace sharedWorkspace] frontmostApplication];
     return app.processIdentifier;
@@ -349,20 +374,63 @@ const CFMutableDictionaryRef trackedWindows = CFDictionaryCreateMutable(NULL, 0,
     }
     CGRect screenBounds;
     CGRectMakeWithDictionaryRepresentation((CFDictionaryRef) CFDictionaryGetValue(windowInfo, kCGWindowBounds), &screenBounds);
-    CGFloat scale = [AOUtil findScalingFactor:[AOUtil findScreenForRect:screenBounds]];
+//    BOOL isFs = [AOUtil isFullScreen: screenBounds];
     CGWindowID windowId = static_cast<CGWindowID>(wnd.handle.winid);
-    CGImageRef scaledImageRef = CGWindowListCreateImage(CGRectNull, kCGWindowListOptionIncludingWindow, windowId, kCGWindowImageBestResolution);
+    CGImageRef scaledImageRef = CGWindowListCreateImage(CGRectNull, kCGWindowListOptionIncludingWindow, windowId, kCGWindowImageNominalResolution | kCGWindowImageBoundsIgnoreFraming);
+//    [AOUtil captureImageFile:scaledImageRef withInfo:@"fullimage" withBounds:screenBounds];
+
     for (vector<CaptureRect>::iterator it = rects.begin(); it != rects.end(); ++it) {
-        CGRect iscreenBounds = CGRectMake((CGFloat) it->rect.x * scale, (CGFloat) it->rect.y * scale, (CGFloat) it->rect.width * scale, (CGFloat) it->rect.height * scale);
-        CGImageRef imageRef = CGImageCreateWithImageInRect(scaledImageRef, iscreenBounds);
+        CGRect iscreenBounds = CGRectMake((CGFloat) it->rect.x, (CGFloat) it->rect.y, (CGFloat) it->rect.width, (CGFloat) it->rect.height);
+        CGImageRef _imageRef = CGImageCreateWithImageInRect(scaledImageRef, iscreenBounds);
+        CGImageRef imageRef = [AOUtil CGImageResize:_imageRef toSize:iscreenBounds.size];
+        CGImageRelease(_imageRef);
+        [AOUtil captureImageFile:imageRef withInfo:@"clip" withBounds:iscreenBounds];
         NSLog(@"C: (%d,%d) [%dx%d] ?? (%zu vs %d)", it->rect.x, it->rect.y, it->rect.width, it->rect.height, it->size, 4 * it->rect.width * it->rect.height);
 
-        if (![AOUtil CGImageResizeGetBytesByScale: imageRef withScale:scale andData:it->data]) {
+        if (![AOUtil CGImageResizeGetBytesByScale: imageRef withScale:1.0 andData:it->data]) {
             fprintf(stderr, "error: could not copy image data\n");
         }
         CGImageRelease(imageRef);
     }
+    NSLog(@"Capture done");
     CGImageRelease(scaledImageRef);
+}
+
+
++ (CGImageRef) CGImageResize:(CGImageRef) image toSize: (CGSize) maxSize {
+    // calculate size
+//    CGFloat ratio = MAX(CGImageGetWidth(image) / maxSize.width, CGImageGetHeight(image) / maxSize.height);
+    size_t width = CGImageGetWidth(image);
+    size_t height = CGImageGetHeight(image);
+    // resize
+    CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    CGContextRef context = CGBitmapContextCreate(NULL, width, height, 8, width * 4, colorspace, kCGImageAlphaPremultipliedLast);
+    CGColorSpaceRelease(colorspace);
+    if (context == NULL) return nil;
+    CGContextSetInterpolationQuality(context, kCGInterpolationNone);
+    // draw image to context (resizing it)
+    CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
+    // extract resulting image from context
+    CGImageRef imgRef = CGBitmapContextCreateImage(context);
+    CGContextRelease(context);
+    return imgRef;
+}
+
++ (BOOL) CGImageResizeGetBytesByScale:(CGImageRef) image withScale: (CGFloat) scale andData: (void *)theData {
+    // calculate size
+    size_t width = CGImageGetWidth(image) / static_cast<size_t>(scale);
+    size_t height = CGImageGetHeight(image) / static_cast<size_t>(scale);
+    // resize
+    CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    CGContextRef context = CGBitmapContextCreate(theData, width, height, 8, width * 4, colorspace, kCGImageAlphaPremultipliedLast);
+    CGColorSpaceRelease(colorspace);
+    if (context == NULL) return false;
+    CGContextSetInterpolationQuality(context, kCGInterpolationNone);
+    // draw image to context (resizing it)
+    CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
+    // extract resulting image from context
+    CGContextRelease(context);
+    return true;
 }
 
 + (void) captureImageFile:(CGImageRef) imageRef withInfo: (NSString*) str withBounds: (CGRect) rect {
@@ -377,22 +445,6 @@ const CFMutableDictionaryRef trackedWindows = CFDictionaryCreateMutable(NULL, 0,
     CGImageDestinationAddImage(destination, imageRef, nullptr);
     CGImageDestinationFinalize(destination);
     CFRelease(destination);
-}
-
-+ (BOOL) CGImageResizeGetBytesByScale:(CGImageRef) image withScale: (CGFloat) scale andData: (void *)theData {
-    // calculate size
-    size_t width = CGImageGetWidth(image) / static_cast<size_t>(scale);
-    size_t height = CGImageGetHeight(image) / static_cast<size_t>(scale);
-    // resize
-    CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
-    CGContextRef context = CGBitmapContextCreate(theData, width, height, 8, width * 4, colorspace, kCGImageAlphaPremultipliedLast);
-    CGColorSpaceRelease(colorspace);
-    if (context == NULL) return false;
-    // draw image to context (resizing it)
-    CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
-    // extract resulting image from context
-    CGContextRelease(context);
-    return true;
 }
 
 + (void) interceptDelegate:(NSWindow *)window {

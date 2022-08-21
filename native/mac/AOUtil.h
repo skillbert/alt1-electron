@@ -16,12 +16,13 @@
 #define MAX_DISPLAY_COUNT 10
 #define MENU_BAR_HEIGHT 24
 #define TITLE_BAR_HEIGHT 28
+#define array_count(a) (sizeof((a)) / sizeof(*(a)))
 
 NS_ASSUME_NONNULL_BEGIN
-#define array_count(a) (sizeof((a)) / sizeof(*(a)))
 
 @interface AOUtil : NSObject
 + (BOOL)isRsWindowActive;
++ (BOOL) isFullScreen:(CGRect) bounds;
 + (BOOL) macOSGetMouseState;
 + (void) macOSNewWindowListener:(CGWindowID) window type: (WindowEventType) type callback: (Napi::Function) callback;
 + (void) macOSRemoveWindowListener:(CGWindowID) window type: (WindowEventType) type callback: (Napi::Function) callback;
@@ -39,6 +40,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (void) OSCaptureWindowMulti:(OSWindow)wnd withRects:(vector<CaptureRect>)rects;
 + (void) captureImageFile:(CGImageRef) imageRef withInfo: (NSString*) str withBounds: (CGRect) rect;
++ (CGImageRef) CGImageResize:(CGImageRef) image toSize: (CGSize) maxSize;
 + (BOOL) CGImageResizeGetBytesByScale:(CGImageRef) image withScale: (CGFloat) scale andData: (void *)theData;
 + (void) interceptDelegate:(NSWindow *)window;
 + (BOOL) updateNotifications:(BOOL) add forObserver: (AXObserverRef) obs withAppRef: (AXUIElementRef) appRef withReferenceObj: (nullable void *)refcon withNotifications: (CFStringRef) notification, ...;
