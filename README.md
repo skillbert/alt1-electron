@@ -45,6 +45,36 @@ npm run ui
 # emerge --ask --noreplace dev-util/pkgconf x11-libs/libxcb x11-libs/xcb-util-wm sys-process/procps
 ```
 
+
+
+## Mac Errata
+
+* To (re)generate the xcode project (for debugging and other helpful development activities):
+
+  ```bash
+  node-gyp configure --debug -- -f xcode
+  ```
+
+  * Note that node-gyp helpfully (stupidly) does not provide a mechanism to change the output path from `build`. This means that your xcode project file (directory) will be completely blown away every single time npm does anything. I mitigate this on my personal by moving the `build/binding.xcodeproj` directory to `.xcode` and working from there; updating my `.xcode/binding.xcodeproj` only when I need(ed) to make changes to the `binding.gyp`.  YMMV
+
+#### Gatekeeper, Accessibility, Screen Recording 
+
+alt1-electron will only work if the electron application has both:
+
+* Accessibility API enabled: <img src="/Users/user/Library/Application Support/typora-user-images/image-20220821071358114.png" alt="image-20220821071358114" style="zoom:50%;" />
+* Screen Recording enabled: <img src="/Users/user/Library/Application Support/typora-user-images/image-20220821071428113.png" alt="image-20220821071428113" style="zoom:50%;" />
+
+Running `npm run ui` _should_ request the permissions using the native (os-level) workflow. However, in a development environment with changing electron versions etc it may be necessary to _remove_ the `Electron.app` from the above permissions list to allow it to "re-request" the permissions. 
+
+For some unknown reason, macos does _not_ do a great job of handling _updates_ to applications that have been granted the above permissions. You may keep getting the popup asking for 'screen recording' or 'control' and when visiting the list in system preferences you'll notice that `Electron.app` is already checked. From here you'll scratch your head and say: 'wtf you already have permissions'. To fix this situation:
+
+* Remove `Electron.app` from BOTH `Accessibility` AND `Screen Recording`
+* Kill/stop `npm run ui` (or if you're running it in Xcode stop the alt1-electron process)
+* Start alt1-electron either by `npm run ui` or by running the application in Xcode
+* You should see the popup(s) _again_ but _this time_ checking the box will actually give the `Electron.app` the permissions
+
+The above will only be necessary _ONCE_ per `Electron.app` version / build change. This means: whenever `<project>/node_modules/electron/dist/Electron.app` changes, you will likely have to do this.
+
 # Why rewrite?
 
 ### Clean slate
@@ -98,6 +128,7 @@ See [contributing.md](./contributing.md) for information on how to contribute to
 	- [ ] Screenshot sharing (alt+2)
 	- [ ] Window manipulation tool (alt+3)
 	
+
 **Platform specific**
 - [x] Windows
 	- [x] Basics
@@ -113,7 +144,7 @@ See [contributing.md](./contributing.md) for information on how to contribute to
 	- [x] Window pinning
 	- [x] Capture
 		- [x] Window
-- [ ] MacOS
+- [x] MacOS
 	- [x] Basics
 	- [o] Window events API (partial)
 	- [x] Window pinning
