@@ -256,9 +256,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 			let browser = new BrowserWindow({
 				webPreferences: { nodeIntegration: true, contextIsolation: false },
 				frame: false,
-				opacity: 0.5,
 				enableLargerThanScreen: true,
-				backgroundColor: "#777",
 				transparent: true,
 				x: bounds.x,
 				y: bounds.y,
