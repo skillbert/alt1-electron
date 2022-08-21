@@ -384,7 +384,7 @@ const CFMutableDictionaryRef trackedWindows = CFDictionaryCreateMutable(NULL, 0,
         CGImageRef _imageRef = CGImageCreateWithImageInRect(scaledImageRef, iscreenBounds);
         CGImageRef imageRef = [AOUtil CGImageResize:_imageRef toSize:iscreenBounds.size];
         CGImageRelease(_imageRef);
-        [AOUtil captureImageFile:imageRef withInfo:@"clip" withBounds:iscreenBounds];
+//        [AOUtil captureImageFile:imageRef withInfo:@"clip" withBounds:iscreenBounds];
         NSLog(@"C: (%d,%d) [%dx%d] ?? (%zu vs %d)", it->rect.x, it->rect.y, it->rect.width, it->rect.height, it->size, 4 * it->rect.width * it->rect.height);
 
         if (![AOUtil CGImageResizeGetBytesByScale: imageRef withScale:1.0 andData:it->data]) {

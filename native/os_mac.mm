@@ -16,7 +16,7 @@ JSRectangle OSWindow::GetBounds() {
 
     CGRect screenBounds;
     CGRectMakeWithDictionaryRepresentation((CFDictionaryRef) CFDictionaryGetValue(windowInfo, kCGWindowBounds), &screenBounds);
-    BOOL isFs = [AOUtil isFullScreen: screenBounds];
+//    BOOL isFs = [AOUtil isFullScreen: screenBounds];
     JSRectangle jbounds(static_cast<int>(screenBounds.origin.x), static_cast<int>(screenBounds.origin.y), static_cast<int>(screenBounds.size.width), static_cast<int>(screenBounds.size.height));
 //    NSLog(@"B: %@ (%d,%d) [%dx%d]", (isFs?@"YES":@"NO"), jbounds.x, jbounds.y, jbounds.width, jbounds.height);
     return jbounds;
