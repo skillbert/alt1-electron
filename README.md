@@ -114,11 +114,11 @@ See [contributing.md](./contributing.md) for information on how to contribute to
 	- [x] Capture
 		- [x] Window
 - [ ] MacOS
-	- [ ] Basics
-	- [ ] Window events API
-	- [ ] Window pinning
-	- [ ] Capture
-		- [ ] Window
+	- [x] Basics
+	- [o] Window events API (partial)
+	- [x] Window pinning
+	- [x] Capture
+		- [x] Window
 
 **TODO**
 - Actually implement capture method toggle

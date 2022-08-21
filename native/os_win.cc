@@ -32,6 +32,9 @@ JSRectangle OSWindow::GetClientBounds() {
 	MapWindowPoints(this->handle, HWND_DESKTOP, (LPPOINT)&rect, 2);
 	return JSRectangle(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
 }
+float OSWindow::OSGetScale() {
+    return 1.0;
+}
 bool OSWindow::IsValid() {
 	if (!this->handle) { return false; }
 	return IsWindow(this->handle);

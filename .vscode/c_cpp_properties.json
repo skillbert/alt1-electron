@@ -1,6 +1,37 @@
 {
     "configurations": [
         {
+            "name": "Mac",
+            "includePath": [
+                "${workspaceFolder}/node_modules/node-addon-api",
+                "~/.electron-gyp/18.2.0/include/node",
+                "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include",
+                "${default}"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE",
+                "OS_MAC"
+            ],
+            "compilerArgs": [
+                "-std=c++17",
+                "-L/usr/local/lib",
+                "-objc",
+                "-framework AppKit",
+                "-framework Foundation",
+                "-framework CoreGraphics",
+                "-framework ApplicationServices"
+            ],
+            "macFrameworkPath": [
+                "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks"
+            ],
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "macos-clang-x64",
+            "compilerPath": "/usr/bin/clang"
+        },
+        {
             "name": "Win32",
             "includePath": [
                 "${workspaceFolder}/node_modules/node-addon-api",

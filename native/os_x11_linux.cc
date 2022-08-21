@@ -75,6 +75,10 @@ JSRectangle OSWindow::GetClientBounds() {
 	return JSRectangle(x, y, w, h);
 }
 
+float OSWindow::OSGetScale() {
+    return 1.0;
+}
+
 bool OSWindow::IsValid() {
 	if (!this->handle) {
 		return false;

@@ -72,7 +72,7 @@ Napi::Value CaptureWindowMulti(const Napi::CallbackInfo& info) {
 Napi::Value GetRsHandles(const Napi::CallbackInfo& info) {
 	auto handles = OSGetRsHandles();
 	auto ret = Napi::Array::New(info.Env(), handles.size());
-	for (size_t i = 0; i < handles.size(); i++) { ret.Set(i, handles[i].ToJS(info.Env())); }
+	for (size_t i = 0; i < handles.size(); i++) { ret.Set(static_cast<uint32_t>(i), handles[i].ToJS(info.Env())); }
 	return ret;
 }
 
@@ -81,6 +81,7 @@ Napi::Value GetWindowBounds(const Napi::CallbackInfo& info) { return OSWindow::F
 Napi::Value GetClientBounds(const Napi::CallbackInfo& info) { return OSWindow::FromJsValue(info[0]).GetClientBounds().ToJs(info.Env()); }
 Napi::Value GetWindowTitle(const Napi::CallbackInfo& info) { return Napi::String::New(info.Env(), OSWindow::FromJsValue(info[0]).GetTitle()); }
 Napi::Value GetMouseState(const Napi::CallbackInfo& info) { return Napi::Boolean::New(info.Env(), OSGetMouseState()); }
+Napi::Value GetScale(const Napi::CallbackInfo& info) { return Napi::Number::New(info.Env(), OSWindow::FromJsValue(info[0]).OSGetScale()); }
 
 void SetWindowParent(const Napi::CallbackInfo& info) {
 	auto wnd = OSWindow::FromJsValue(info[0]);

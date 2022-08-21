@@ -214,9 +214,10 @@ export function initIpcApi(ipcMain: IpcMain) {
 			clientRect: wnd.rsClient.window.getClientBounds(),
 			lastActiveTime: wnd.rsClient.lastActiveTime,
 			ping: 10,//TODO
-			scaling: 1,//TODO
+			scaling: wnd.rsClient.window.getScale(),
 			captureMode: settings.captureMode
 		};
+		console.log("rsbounds", state);
 		e.returnValue = { value: state };
 	}));
 

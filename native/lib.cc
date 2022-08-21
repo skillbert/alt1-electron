@@ -16,6 +16,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
 	exports.Set("getActiveWindow", Napi::Function::New(env, JSGetActiveWindow));
 	exports.Set("getMouseState", Napi::Function::New(env, GetMouseState));
 	exports.Set("setWindowShape", Napi::Function::New(env, SetWindowShape));
+	exports.Set("getScale", Napi::Function::New(env, GetScale));
 
 	exports.Set("newWindowListener", Napi::Function::New(env, NewWindowListener));
 	exports.Set("removeWindowListener", Napi::Function::New(env, RemoveWindowListener));

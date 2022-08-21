@@ -130,6 +130,7 @@ var alt1api: Partial<typeof alt1> = {
 		return true;
 	},
 	overLayRect(color, x, y, width, height, time, linewidth) {
+		console.log("overlayRect:", {x, y, width, height, time, linewidth});
 		queueOverlayCommand({ command: "draw", time, action: { type: "rect", x, y, width, height, color, linewidth } });
 		return true;
 	},
@@ -155,17 +156,21 @@ var alt1api: Partial<typeof alt1> = {
 
 	//new API's
 	capture(x, y, width, height) {
+		console.log("alt1api: capture(%d, %d, %d, %d)", x, y, width, height);
 		return captureSync(x, y, width, height).data;
 	},
 	async captureAsync(x, y, width, height) {
+		console.log("alt1api: captureAsync(%d, %d, %d, %d)", x, y, width, height);
 		let r = await ipcRenderer.invoke("capture", x, y, width, height);
 		return r;
 	},
 	async captureMultiAsync(areas) {
+		console.log("alt1api: captureMultiAsync(...)", areas);
 		let r = await ipcRenderer.invoke("capturemulti", areas);
 		return r;
 	},
 	bindGetRegionBuffer(id, x, y, w, h) {
+		console.log("alt1api: bindGetRegionBuffer(%d, %d, %d, %d, %d)", id, x, y, w, h);
 		if (!boundImage || id != 1) { throw new Error("no bound image"); }
 		return subImageData(boundImage, x, y, w, h).data;
 	},
