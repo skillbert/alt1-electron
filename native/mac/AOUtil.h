@@ -9,7 +9,9 @@
 #import <CoreFoundation/CoreFoundation.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
+#import <ApplicationServices/ApplicationServices.h>
 #import "AONSWindowDelegate.h"
+#import "AOTrackedEvent.h"
 #include "stdint.h"
 #include "../os.h"
 

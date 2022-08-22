@@ -64,10 +64,12 @@
 
 - (void)windowDidBecomeKey:(NSNotification*)notification {
     [delegate windowDidBecomeKey:notification];
+    [self adjustLevel:notification.object];
 }
 
 - (void)windowDidResignKey:(NSNotification*)notification {
     [delegate windowDidResignKey:notification];
+    [self adjustLevel:notification.object];
 }
 
 - (NSSize)windowWillResize:(NSWindow*)sender toSize:(NSSize)frameSize {

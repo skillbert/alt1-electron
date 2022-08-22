@@ -269,7 +269,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 				focusable: false
 			});
 			browser.setVisibleOnAllWorkspaces(true, {visibleOnFullScreen: true, skipTransformProcessType: true});
-			browser.setAlwaysOnTop(true, "screen-saver");
+			// browser.setAlwaysOnTop(true, "screen-saver");
 
 			let pin: OSWindowPin = new OSWindowPin(browser, this.window, "cover");
 			browser.loadFile(path.resolve(__dirname, "overlayframe/index.html"));
