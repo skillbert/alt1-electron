@@ -32,8 +32,11 @@
 }
 
 - (void)adjustLevel:(NSWindow *)window {
+    NSLog(@"CollectionBehavior: %@", @([window collectionBehavior]));
     if ([AOUtil isRsWindowActive]) {
         [window setLevel:NSScreenSaverWindowLevel];
+        [window setCollectionBehavior:NSWindowCollectionBehaviorFullScreenAuxiliary];
+        [window makeKeyAndOrderFront:nil];
     } else {
         [window setLevel:NSNormalWindowLevel];
     }

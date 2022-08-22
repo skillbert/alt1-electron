@@ -22,6 +22,8 @@ bool delegateSet = false;
 static void updateWindowLevel(NSWindow *window) {
     if ([AOUtil isRsWindowActive]) {
         [window setLevel:NSScreenSaverWindowLevel];
+        [window setCollectionBehavior:NSWindowCollectionBehaviorFullScreenAuxiliary];
+        [window makeKeyAndOrderFront:nil];
         NSLog(@"Top: %@ %@", window, [window delegate]);
     } else {
         [window setLevel:NSNormalWindowLevel];
@@ -43,11 +45,30 @@ static bool str_eq(CFStringRef theString, CFStringRef theOtherString) {
     return CFStringCompare(theString, theOtherString, 0) == kCFCompareEqualTo;
 }
 
+// Detect if the app's windows are on the active space or not
+static BOOL areWeOnActiveSpaceNative() {
+    BOOL isOnActiveSpace = NO;
+    for (NSWindow *window in [[NSApplication sharedApplication] orderedWindows]) {
+        isOnActiveSpace = [window isOnActiveSpace];
+        if (isOnActiveSpace) {
+            break;
+        }
+    }
+    return isOnActiveSpace;
+}
+
+
 static void ax_callback(AXObserverRef observer, AXUIElementRef element, CFStringRef notification, void *refcon) {
     NSLog(@"==%@==", notification);
     pid_t pid;
     NSView *view = ((NSView *) refcon);
+    if(view == nil) {
+        return;
+    }
     NSWindow *window = [view window];
+    if(window == nil) {
+        return;
+    }
     AXError err = AXUIElementGetPid(element, &pid);
 
     if (err != kAXErrorSuccess) {
@@ -63,6 +84,10 @@ static void ax_callback(AXObserverRef observer, AXUIElementRef element, CFString
                 CGWindowID rsWinId = [rsWinIdRef unsignedIntValue];
                 NSLog(@"It appears the RS Window ID did not really change... from %@ ==> %@", @(rsWinId), @(nwindowId));
                 if(rsWinId == nwindowId) {
+                    BOOL hasSwitchedToFullScreenApp = !areWeOnActiveSpaceNative();
+                    if(hasSwitchedToFullScreenApp) {
+                        updateWindowLevel(window);
+                    }
                     return;
                 }
             } else {
@@ -119,17 +144,6 @@ static void ax_callback(AXObserverRef observer, AXUIElementRef element, CFString
         }];
     }
 }
-// Detect if the app's windows are on the active space or not
-BOOL areWeOnActiveSpaceNative() {
-    BOOL isOnActiveSpace = NO;
-    for (NSWindow *window in [[NSApplication sharedApplication] orderedWindows]) {
-        isOnActiveSpace = [window isOnActiveSpace];
-        if (isOnActiveSpace) {
-            break;
-        }
-    }
-    return isOnActiveSpace;
-}
 
 typedef void (^blockType)(void);
 @interface AOUtil()
@@ -140,15 +154,6 @@ typedef void (^blockType)(void);
 +(void) initialize {
     dispatch_once_t once;
     dispatch_once(&once, [AOUtil createEventBlocks]);
-    // Subscribe to macOS spaces change event
-    [[[NSWorkspace sharedWorkspace] notificationCenter] addObserverForName:NSWorkspaceActiveSpaceDidChangeNotification
-                                                                    object:NULL
-                                                                     queue:NULL
-                                                                usingBlock:^(NSNotification *note) {
-        // Create new data
-        BOOL hasSwitchedToFullScreenApp = !areWeOnActiveSpaceNative();
-        NSLog(@"WORKSPACE CHANGE: %@ %@", @(hasSwitchedToFullScreenApp), [note debugDescription]);
-    }];
 }
 
 + (void (^)(void)) createEventBlocks {
