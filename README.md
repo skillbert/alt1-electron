@@ -146,7 +146,7 @@ See [contributing.md](./contributing.md) for information on how to contribute to
 		- [x] Window
 - [x] MacOS
 	- [x] Basics
-	- [o] Window events API (partial)
+	- [x] Window events API
 	- [x] Window pinning
 	- [x] Capture
 		- [x] Window
