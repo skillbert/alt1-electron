@@ -62,14 +62,14 @@
     NSLock *lock = [AOTrackedEvent eventLock];
     [lock tryLock];
     NSMutableSet<AOTrackedEvent*> *events = [AOTrackedEvent events];
-    NSLog(@"push: Events Before: %@", @([events count]));
+    NSLog(@"push: Events Before: %@ [%@]", @([events count]), events);
     if([events containsObject:event]) {
         NSLog(@"Unable to add %@ as it already exists!", event);
         [lock unlock];
         return;
     }
     [events addObject:event];
-    NSLog(@"push: Events After: %@", @([events count]));
+    NSLog(@"push: Events After: %@ [%@]", @([events count]), events);
     [lock unlock];
 }
 
@@ -81,7 +81,7 @@
     NSLock *lock = [AOTrackedEvent eventLock];
     [lock tryLock];
     NSMutableSet<AOTrackedEvent*> *events = [AOTrackedEvent events];
-    NSLog(@"remove: Events Before: %@", @([events count]));
+    NSLog(@"remove: Events Before: %@ [%@]", @([events count]), events);
     NSArray<AOTrackedEvent*> *ievents = [events allObjects];
     for(AOTrackedEvent *event in ievents) {
         if(event->window == window && event->type == type && event->callbackRef == Napi::Persistent(callback)) {
@@ -89,7 +89,7 @@
             [events removeObject:event];
         }
     }
-    NSLog(@"remove: Events After: %@", @([events count]));
+    NSLog(@"remove: Events After: %@ [%@]", @([events count]), events);
     [lock unlock];
 }
 
@@ -99,6 +99,28 @@
 
 - (WindowEventType) type {
     return self->type;
+}
+
+- (NSString *) typeName {
+    switch(self->type) {
+        case WindowEventType::Show:
+            return @"Show";
+        case WindowEventType::Click:
+            return @"Click";
+        case WindowEventType::Close:
+            return @"Close";
+        case WindowEventType::Move:
+            return @"Move";
+    }
+    return @"";
+}
+
+- (NSString *) description {
+    return [self debugDescription];
+}
+
+- (NSString *) debugDescription {
+    return [NSString stringWithFormat:@"Event[%@, %d]", [self typeName], self->window];
 }
 
 - (instancetype) initWith: (CGWindowID) window andType: (WindowEventType) type andCallback:(Napi::Function) callback {
@@ -112,6 +134,10 @@
     return self;
 }
 
+- (BOOL) isEqualTo:(id)object {
+    return [self isEqual:object];
+}
+
 - (BOOL) isEqual:(id)object {
     if (object == nil) {
         return NO;
@@ -120,7 +146,14 @@
         return NO;
     }
     AOTrackedEvent *other = (AOTrackedEvent*)object;
-    if(other->window != self->window || other->type != self->type || other->callbackRef != self->callbackRef) {
+    if(other->window == self->window && other->type == self->type) {
+        if(other->callbackRef == self->callbackRef) {
+            NSLog(@"cb eq");
+            return YES;
+        }
+        return NO;
+    }
+    if(other->window != self->window || other->type != self->type || !(other->callbackRef == self->callbackRef)) {
         return NO;
     }
     return YES;

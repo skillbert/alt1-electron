@@ -23,13 +23,15 @@
 NS_ASSUME_NONNULL_BEGIN
 
 @interface AOUtil : NSObject
-+ (BOOL)isRsWindowActive;
++ (BOOL) isRsWindowActive;
 + (BOOL) isFullScreen:(CGRect) bounds;
 + (BOOL) macOSGetMouseState;
 + (void) macOSNewWindowListener:(CGWindowID) window type: (WindowEventType) type callback: (Napi::Function) callback;
 + (void) macOSRemoveWindowListener:(CGWindowID) window type: (WindowEventType) type callback: (Napi::Function) callback;
++ (void) macOSSetParent:(OSWindow) parent forWindow: (OSWindow) wnd;
++ (void) updateWindow:(NSWindow*) window;
 
-+ (pid_t)focusedPid;
++ (pid_t) focusedPid;
 + (pid_t) pidForWindow:(uintptr_t) winid;
 
 + (CFDictionaryRef) findWindow:(uintptr_t) winid;
@@ -46,7 +48,6 @@ NS_ASSUME_NONNULL_BEGIN
 + (BOOL) CGImageResizeGetBytesByScale:(CGImageRef) image withScale: (CGFloat) scale andData: (void *)theData;
 + (void) interceptDelegate:(NSWindow *)window;
 + (BOOL) updateNotifications:(BOOL) add forObserver: (AXObserverRef) obs withAppRef: (AXUIElementRef) appRef withReferenceObj: (nullable void *)refcon withNotifications: (CFStringRef) notification, ...;
-+ (void) macOSSetParent:(OSWindow) parent forWindow: (OSWindow) wnd;
 @end
 
 NS_ASSUME_NONNULL_END

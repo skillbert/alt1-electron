@@ -108,6 +108,7 @@ export class ManagedWindow {
 		this.window = new BrowserWindow({
 			webPreferences: { nodeIntegration: true, webviewTag: true, contextIsolation: false },
 			frame: false,
+			enableLargerThanScreen: true,
 			width: posrect.width,
 			height: posrect.height,
 			transparent: true,

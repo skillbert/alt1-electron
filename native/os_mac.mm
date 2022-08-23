@@ -13,26 +13,32 @@ typedef struct filterData {
 
 JSRectangle OSWindow::GetBounds() {
     CFDictionaryRef windowInfo = [AOUtil findWindow: this->handle.winid];
+    
 
     CGRect screenBounds;
-    CGRectMakeWithDictionaryRepresentation((CFDictionaryRef) CFDictionaryGetValue(windowInfo, kCGWindowBounds), &screenBounds);
-//    BOOL isFs = [AOUtil isFullScreen: screenBounds];
+    if(windowInfo == nullptr) {
+        screenBounds = [[NSScreen screens][0] frame];
+    } else {
+        CGRectMakeWithDictionaryRepresentation((CFDictionaryRef) CFDictionaryGetValue(windowInfo, kCGWindowBounds), &screenBounds);
+    }
     JSRectangle jbounds(static_cast<int>(screenBounds.origin.x), static_cast<int>(screenBounds.origin.y), static_cast<int>(screenBounds.size.width), static_cast<int>(screenBounds.size.height));
-//    NSLog(@"B: %@ (%d,%d) [%dx%d]", (isFs?@"YES":@"NO"), jbounds.x, jbounds.y, jbounds.width, jbounds.height);
     return jbounds;
 }
 
 JSRectangle OSWindow::GetClientBounds() {
     CFDictionaryRef windowInfo = [AOUtil findWindow: this->handle.winid];
     CGRect screenBounds;
-    CGRectMakeWithDictionaryRepresentation((CFDictionaryRef) CFDictionaryGetValue(windowInfo, kCGWindowBounds), &screenBounds);
+    if(windowInfo == nullptr) {
+        screenBounds = [[NSScreen screens][0] frame];
+    } else {
+        CGRectMakeWithDictionaryRepresentation((CFDictionaryRef) CFDictionaryGetValue(windowInfo, kCGWindowBounds), &screenBounds);
+    }
     BOOL isFs = [AOUtil isFullScreen: screenBounds];
     JSRectangle jbounds(static_cast<int>(screenBounds.origin.x), static_cast<int>(screenBounds.origin.y), static_cast<int>(screenBounds.size.width), static_cast<int>(screenBounds.size.height));
     if(!isFs) {
         jbounds.y += TITLE_BAR_HEIGHT;
         jbounds.height = jbounds.height - TITLE_BAR_HEIGHT;
     }
-//    NSLog(@"CB: %@ (%d,%d) [%dx%d]", (isFs?@"YES":@"NO"), jbounds.x, jbounds.y, jbounds.width, jbounds.height);
     return jbounds;
 }
 
@@ -171,18 +177,8 @@ bool OSGetMouseState() {
     return [AOUtil macOSGetMouseState];
 }
 
-void OSCaptureMulti(OSWindow wnd, CaptureMode mode, vector <CaptureRect> rects, Napi::Env env) {
-    switch (mode) {
-        case CaptureMode::Desktop: {
-            [AOUtil OSCaptureWindowMulti: wnd withRects:rects];
-            break;
-        }
-        case CaptureMode::Window:
-            [AOUtil OSCaptureWindowMulti: wnd withRects:rects];
-            break;
-        default:
-            throw Napi::RangeError::New(env, "Capture mode not supported");
-    }
+void OSCaptureMulti(OSWindow wnd, __attribute__((unused)) CaptureMode mode, vector <CaptureRect> rects, __attribute__((unused)) Napi::Env env) {
+    [AOUtil OSCaptureWindowMulti: wnd withRects:rects];
 }
 
 void OSNewWindowListener(OSWindow wnd, WindowEventType type, Napi::Function callback) {

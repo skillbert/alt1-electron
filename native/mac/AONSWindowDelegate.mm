@@ -31,16 +31,6 @@
         [super forwardInvocation:invocation];
 }
 
-- (void)adjustLevel:(NSWindow *)window {
-    NSLog(@"CollectionBehavior: %@", @([window collectionBehavior]));
-    if ([AOUtil isRsWindowActive]) {
-        [window setLevel:NSScreenSaverWindowLevel];
-        [window setCollectionBehavior:NSWindowCollectionBehaviorFullScreenAuxiliary];
-        [window makeKeyAndOrderFront:nil];
-    } else {
-        [window setLevel:NSNormalWindowLevel];
-    }
-}
 #pragma mark NSWindowDelegate protocol
 
 - (void)windowDidChangeOcclusionState:(NSNotification*)notification {
@@ -57,22 +47,20 @@
 
 - (void)windowDidBecomeMain:(NSNotification *)notification {
     [delegate windowDidBecomeMain:notification];
-    [self adjustLevel:notification.object];
+    [AOUtil updateWindow:notification.object];
 }
 
 - (void)windowDidResignMain:(NSNotification *)notification {
     [delegate windowDidResignMain:notification];
-    [self adjustLevel:notification.object];
+    [AOUtil updateWindow:notification.object];
 }
 
 - (void)windowDidBecomeKey:(NSNotification*)notification {
     [delegate windowDidBecomeKey:notification];
-    [self adjustLevel:notification.object];
 }
 
 - (void)windowDidResignKey:(NSNotification*)notification {
     [delegate windowDidResignKey:notification];
-    [self adjustLevel:notification.object];
 }
 
 - (NSSize)windowWillResize:(NSWindow*)sender toSize:(NSSize)frameSize {
