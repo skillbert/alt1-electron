@@ -17,6 +17,7 @@ typedef BOOL (^TrackedEventCondition)(AOTrackedEvent*);
 @interface AOTrackedEvent : NSObject {
     
 }
++ (NSString *) typeName: (WindowEventType) type;
 + (void) IterateEvents:(TrackedEventCondition) condition andCallback:(std::function<void(Napi::Env, Napi::Function)>) cb;
 + (void) push: (CGWindowID) window andType: (WindowEventType) type andCallback:(Napi::Function) callback;
 + (void) remove: (CGWindowID) window andType: (WindowEventType) type andCallback:(Napi::Function) callback;

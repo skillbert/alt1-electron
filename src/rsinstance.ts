@@ -261,6 +261,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 				width: bounds.width,
 				height: bounds.height,
 				show: false,
+				hasShadow: false,
 				//resizable: false,
 				movable: false,
 				skipTaskbar: true,

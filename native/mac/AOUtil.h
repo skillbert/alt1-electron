@@ -12,6 +12,7 @@
 #import <ApplicationServices/ApplicationServices.h>
 #import "AONSWindowDelegate.h"
 #import "AOTrackedEvent.h"
+#include <unordered_map>
 #include "stdint.h"
 #include "../os.h"
 
@@ -20,10 +21,12 @@
 #define TITLE_BAR_HEIGHT 28
 #define array_count(a) (sizeof((a)) / sizeof(*(a)))
 
+using namespace std;
+
 NS_ASSUME_NONNULL_BEGIN
 
 @interface AOUtil : NSObject
-+ (BOOL) isRsWindowActive;
++ (BOOL) shouldBeOnTop;
 + (BOOL) isFullScreen:(CGRect) bounds;
 + (BOOL) macOSGetMouseState;
 + (void) macOSNewWindowListener:(CGWindowID) window type: (WindowEventType) type callback: (Napi::Function) callback;
@@ -33,19 +36,20 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (pid_t) focusedPid;
 + (pid_t) pidForWindow:(uintptr_t) winid;
-
 + (CFDictionaryRef) findWindow:(uintptr_t) winid;
 
-+ (CGWindowID)appFocusedWindow:(pid_t)pid;
++ (CGWindowID) appMainWindow:(pid_t)pid;
++ (CGWindowID) appFocusedWindow:(pid_t)pid;
 + (CGRect) appBounds:(pid_t) pid;
 + (NSString *) appTitle:(pid_t) pid;
+
 + (CGFloat) findScalingFactor: (CGDirectDisplayID) displayId;
 + (CGDirectDisplayID) findScreenForRect: (CGRect) bounds;
 
-+ (void) OSCaptureWindowMulti:(OSWindow)wnd withRects:(vector<CaptureRect>)rects;
-+ (void) captureImageFile:(CGImageRef) imageRef withInfo: (NSString*) str withBounds: (CGRect) rect;
-+ (CGImageRef) CGImageResize:(CGImageRef) image toSize: (CGSize) maxSize;
-+ (BOOL) CGImageResizeGetBytesByScale:(CGImageRef) image withScale: (CGFloat) scale andData: (void *)theData;
++ (void) capture:(OSWindow)wnd withRects:(vector<CaptureRect>)rects;
++ (void) captureImageFile:(CGImageRef) imageRef withFilename: (NSString*)filename;
++ (CGImageRef) redrawImage:(CGImageRef) image;
++ (BOOL) drawImage:(CGImageRef) image ontoBuffer: (void *)theData withScale: (CGFloat) scale;
 + (void) interceptDelegate:(NSWindow *)window;
 + (BOOL) updateNotifications:(BOOL) add forObserver: (AXObserverRef) obs withAppRef: (AXUIElementRef) appRef withReferenceObj: (nullable void *)refcon withNotifications: (CFStringRef) notification, ...;
 @end

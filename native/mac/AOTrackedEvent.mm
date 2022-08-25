@@ -10,6 +10,7 @@
 + (NSLock*) eventLock;
 + (void) pushEvent: (AOTrackedEvent*)event;
 + (NSMutableSet *)events;
++ (BOOL) eventsContain: (CGWindowID) window andType: (WindowEventType) type andCallback:(Napi::Function) callback;
 @end
 
 @implementation AOTrackedEvent {
@@ -38,6 +39,20 @@
 }
 
 #pragma mark - Public Category functions
+
++ (NSString *) typeName: (WindowEventType) type {
+    switch(type) {
+        case WindowEventType::Show:
+            return @"Show";
+        case WindowEventType::Click:
+            return @"Click";
+        case WindowEventType::Close:
+            return @"Close";
+        case WindowEventType::Move:
+            return @"Move";
+    }
+    return @"";
+}
 
 + (void) IterateEvents: (TrackedEventCondition) condition andCallback:(std::function<void(Napi::Env, Napi::Function)>) cb {
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -73,8 +88,31 @@
     [lock unlock];
 }
 
++ (BOOL) eventsContain: (CGWindowID) window andType: (WindowEventType) type andCallback:(Napi::Function) callback {
+    NSLock *lock = [AOTrackedEvent eventLock];
+    @try {
+        [lock tryLock];
+        NSMutableSet<AOTrackedEvent*> *events = [AOTrackedEvent events];
+        NSArray<AOTrackedEvent*> *ievents = [events allObjects];
+        for(AOTrackedEvent *event in ievents) {
+            if(event->window == window && event->type == type && event->callbackRef == Napi::Persistent(callback)) {
+                return YES;
+            }
+        }
+        return NO;
+    } @finally {
+        [lock unlock];
+    }
+}
+
 + (void) push: (CGWindowID) window andType: (WindowEventType) type andCallback:(Napi::Function) callback {
-    [AOTrackedEvent pushEvent: [[AOTrackedEvent alloc] initWith:window andType:type andCallback:callback]];
+    if(![AOTrackedEvent eventsContain:window andType:type andCallback:callback]) {
+//        std::string str = callback.ToString().Utf8Value();
+//        const char* cstr = str.c_str();
+//        printf("event cb: %s\n", cstr);
+        NSLog(@"pushing event: Event[%@, %d]", [AOTrackedEvent typeName:type], window);
+        [AOTrackedEvent pushEvent: [[AOTrackedEvent alloc] initWith:window andType:type andCallback:callback]];
+    }
 }
 
 + (void) remove: (CGWindowID) window andType: (WindowEventType) type andCallback:(Napi::Function) callback {
@@ -101,26 +139,12 @@
     return self->type;
 }
 
-- (NSString *) typeName {
-    switch(self->type) {
-        case WindowEventType::Show:
-            return @"Show";
-        case WindowEventType::Click:
-            return @"Click";
-        case WindowEventType::Close:
-            return @"Close";
-        case WindowEventType::Move:
-            return @"Move";
-    }
-    return @"";
-}
-
 - (NSString *) description {
     return [self debugDescription];
 }
 
 - (NSString *) debugDescription {
-    return [NSString stringWithFormat:@"Event[%@, %d]", [self typeName], self->window];
+    return [NSString stringWithFormat:@"Event[%@, %d]", [AOTrackedEvent typeName:self->type], self->window];
 }
 
 - (instancetype) initWith: (CGWindowID) window andType: (WindowEventType) type andCallback:(Napi::Function) callback {
@@ -146,13 +170,6 @@
         return NO;
     }
     AOTrackedEvent *other = (AOTrackedEvent*)object;
-    if(other->window == self->window && other->type == self->type) {
-        if(other->callbackRef == self->callbackRef) {
-            NSLog(@"cb eq");
-            return YES;
-        }
-        return NO;
-    }
     if(other->window != self->window || other->type != self->type || !(other->callbackRef == self->callbackRef)) {
         return NO;
     }

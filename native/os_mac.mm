@@ -178,7 +178,7 @@ bool OSGetMouseState() {
 }
 
 void OSCaptureMulti(OSWindow wnd, __attribute__((unused)) CaptureMode mode, vector <CaptureRect> rects, __attribute__((unused)) Napi::Env env) {
-    [AOUtil OSCaptureWindowMulti: wnd withRects:rects];
+    [AOUtil capture: wnd withRects:rects];
 }
 
 void OSNewWindowListener(OSWindow wnd, WindowEventType type, Napi::Function callback) {

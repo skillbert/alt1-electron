@@ -10,24 +10,28 @@
 @interface AOUtil()
 + (void (^)(void)) createEventBlocks;
 + (void) accessibilityChanged:(NSNotification*)note;
++ (void) handleAXDestroyed: (pid_t) pid;
 + (void) handleRsDidLaunch: (pid_t) pid;
 + (void) handleRsDidTerminate: (pid_t) pid;
-+ (void) handleAXActivate;
-+ (void) handleAXDeactivate;
-+ (void) handleAXMiniaturize;
-+ (void) handleAXDeminiaturize;
++ (void) handleAXActivate: (pid_t) pid;
++ (void) handleAXDeactivate: (pid_t) pid;
++ (void) handleAXMiniaturize: (pid_t) pid;
++ (void) handleAXDeminiaturize: (pid_t) pid;
 + (void) handleAXMove: (pid_t) pid;
 + (void) handleAXResize: (pid_t) pid;
 + (void) handleClick:(NSEvent*)event;
++ (NSLock*)pidLock;
++ (void)lockPidLock;
++ (void)unlockPidLock;
 @end
 
 extern "C" AXError _AXUIElementGetWindow(AXUIElementRef, CGWindowID *out) __attribute__((weak_import));
 
-const NSMutableDictionary<NSNumber*, NSNumber*> *winIdPidMap = [NSMutableDictionary new];
-const NSMutableDictionary<NSNumber*, id> *pidAppRefMap = [NSMutableDictionary new];
-const NSMutableDictionary<NSNumber*, id> *winIdObsMap = [NSMutableDictionary new];
+const NSMutableDictionary<NSNumber*, NSNumber*> *trackedParents = [NSMutableDictionary new];
 const NSMutableDictionary<NSNumber*, NSNumber*> *trackedWindows = [NSMutableDictionary new];
-const NSMutableDictionary<NSNumber*, NSView*> *trackedViews = [NSMutableDictionary new];
+const NSMutableDictionary<NSNumber*, NSMutableArray<NSView*>*> *trackedViews = [NSMutableDictionary new];
+
+static unordered_map<pid_t, pair<AXUIElementRef, AXObserverRef>> observers;
 
 static inline bool ax_privilege() {
     const void *keys[] = {kAXTrustedCheckOptionPrompt};
@@ -55,25 +59,41 @@ static BOOL areWeOnActiveSpaceNative() {
 }
 
 static void ax_callback(AXObserverRef observer, AXUIElementRef element, CFStringRef notification, void *refcon) {
-    NSLog(@"==%@==", notification);
     pid_t pid;
     AXError err = AXUIElementGetPid(element, &pid);
     if (err != kAXErrorSuccess) {
         NSLog(@"no pid: %@", @(err));
         return;
     }
+    CGWindowID elementWindowId;
+    _AXUIElementGetWindow(element, &elementWindowId);
+    NSLog(@"==%@==: %@ [%@]", notification, @(pid), [NSValue valueWithPointer: element]);
+//    CFArrayRef cnames;
+//    if(AXUIElementCopyAttributeNames(element, &cnames) != kAXErrorSuccess) {
+//        NSLog(@"error copy attribute names %u", pid);
+//        return;
+//    }
+//    CFArrayRef cvalues;
+//    if(AXUIElementCopyMultipleAttributeValues(element, cnames, 0, &cvalues) == kAXErrorSuccess) {
+//        NSArray* values = (NSArray*)cvalues;
+//        NSArray* names = (NSArray*)cnames;
+//        for(NSString* name in names) {
+//            NSLog(@"%@: %@", name, (id)[values objectAtIndex:[names indexOfObject:name]]);
+//        }
+//    }
+//
     if (str_eq(notification, kAXUIElementDestroyedNotification)) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [AOUtil handleRsDidTerminate:pid];
-        });
+        [AOUtil handleAXDestroyed:pid];
+//        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+//        });
     } else if (str_eq(notification, kAXApplicationActivatedNotification)) {
-        [AOUtil handleAXActivate];
+        [AOUtil handleAXActivate:pid];
     } else if (str_eq(notification, kAXApplicationDeactivatedNotification)) {
-        [AOUtil handleAXDeactivate];
+        [AOUtil handleAXDeactivate:pid];
     } else if (str_eq(notification, kAXWindowMiniaturizedNotification)) {
-        [AOUtil handleAXMiniaturize];
+        [AOUtil handleAXMiniaturize:pid];
     } else if (str_eq(notification, kAXWindowDeminiaturizedNotification)) {
-        [AOUtil handleAXDeminiaturize];
+        [AOUtil handleAXDeminiaturize:pid];
     } else if (str_eq(notification, kAXWindowMovedNotification)) {
         [AOUtil handleAXMove: pid];
     } else if (str_eq(notification, kAXWindowResizedNotification)) {
@@ -94,6 +114,23 @@ static bool rightMouseDown = false;
     dispatch_once(&once, [AOUtil createEventBlocks]);
 }
 
+
++ (NSLock*) pidLock {
+    static NSLock* _pidLock = nil;
+    if(_pidLock == nil) {
+        _pidLock = [NSLock new];
+    }
+    return _pidLock;
+}
+
++ (void) lockPidLock {
+    [[AOUtil pidLock] lock];
+}
+
++ (void) unlockPidLock {
+    [[AOUtil pidLock] unlock];
+}
+
 + (void (^)(void)) createEventBlocks {
     [[NSDistributedNotificationCenter defaultCenter] addObserver:self selector:@selector(accessibilityChanged:) name:@"com.apple.accessibility.api" object:nil];
 
@@ -101,35 +138,46 @@ static bool rightMouseDown = false;
                                                                     object:NULL
                                                                      queue:NULL
                                                                 usingBlock:^(NSNotification *note) {
+        [AOUtil lockPidLock];
+        NSLog(@"**%@**", NSWorkspaceDidActivateApplicationNotification);
         NSDictionary *userInfo = [note userInfo];
         NSRunningApplication *frontApp = [userInfo objectForKey:NSWorkspaceApplicationKey];
         _frontPid = [frontApp processIdentifier];
-        if(_rsPid == -1 && [[frontApp localizedName] caseInsensitiveCompare:@"rs2client"]) {
+        if(_rsPid == 0 && [[frontApp localizedName] isEqualToString:@"rs2client"]) {
             _rsPid = _frontPid;
+            [AOUtil handleRsDidLaunch:_rsPid];
+            NSLog(@"RS Launched (Previously): %d %@", [frontApp processIdentifier], [frontApp localizedName]);
         }
         NSLog(@"FrontApp: %d %@", _frontPid, [frontApp localizedName]);
+        [AOUtil unlockPidLock];
     }];
     [[[NSWorkspace sharedWorkspace] notificationCenter] addObserverForName:NSWorkspaceDidTerminateApplicationNotification
                                                                     object:NULL
                                                                      queue:NULL
                                                                 usingBlock:^(NSNotification *note) {
+        NSLog(@"**%@**", NSWorkspaceDidTerminateApplicationNotification);
+        [AOUtil lockPidLock];
         NSDictionary *userInfo = [note userInfo];
         NSRunningApplication *termApp = [userInfo objectForKey:NSWorkspaceApplicationKey];
-        if([[termApp localizedName] caseInsensitiveCompare:@"rs2client"]) {
+        if([[termApp localizedName] isEqualToString:@"rs2client"]) {
             [AOUtil handleRsDidTerminate:[termApp processIdentifier]];
             NSLog(@"RS Terminated: %d %@", [termApp processIdentifier], [termApp localizedName]);
         }
+        [AOUtil unlockPidLock];
     }];
     [[[NSWorkspace sharedWorkspace] notificationCenter] addObserverForName:NSWorkspaceDidLaunchApplicationNotification
                                                                     object:NULL
                                                                      queue:NULL
                                                                 usingBlock:^(NSNotification *note) {
+        NSLog(@"**%@**", NSWorkspaceDidLaunchApplicationNotification);
+        [AOUtil lockPidLock];
         NSDictionary *userInfo = [note userInfo];
         NSRunningApplication *app = [userInfo objectForKey:NSWorkspaceApplicationKey];
         if([[app localizedName] caseInsensitiveCompare:@"rs2client"]) {
             [AOUtil handleRsDidLaunch:[app processIdentifier]];
             NSLog(@"RS Launched: %d %@", [app processIdentifier], [app localizedName]);
         }
+        [AOUtil unlockPidLock];
     }];
 
     return ^{
@@ -166,31 +214,19 @@ static bool rightMouseDown = false;
         }
     });
 }
-
-+ (void) handleRsDidLaunch:(pid_t)pid {
-    CGWindowID windowId = [AOUtil appFocusedWindow:pid];
-    [AOTrackedEvent IterateEvents:^BOOL(AOTrackedEvent* e) {
-        return e.type == WindowEventType::Show && e.window == 0;
-    } andCallback:[windowId](Napi::Env env, Napi::Function callback) {
-        NSLog(@"mac: Notified alt1 of new RS instance [%d]", windowId);
-        callback.Call({Napi::BigInt::New(env, (uint64_t)windowId), Napi::Number::New(env, 2)});
-    }];
-}
-
-+ (void) handleRsDidTerminate:(pid_t)pid {
++ (void) handleAXDestroyed:(pid_t)pid {
     NSNumber *pidRef = [NSNumber numberWithInt:pid];
     NSRunningApplication *application = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
     if(![application isTerminated]) {
         CGWindowID nwindowId = [AOUtil appFocusedWindow:pid];
         if(nwindowId != kCGNullWindowID) {
             if([trackedWindows objectForKey:pidRef] != nil) {
-                NSNumber *rsWinIdRef = trackedWindows[pidRef];
-                CGWindowID rsWinId = [rsWinIdRef unsignedIntValue];
+                CGWindowID rsWinId = [trackedWindows[pidRef] unsignedIntValue];
                 NSLog(@"It appears the RS Window ID did not really change... from %@ ==> %@", @(rsWinId), @(nwindowId));
                 if(rsWinId == nwindowId) {
                     BOOL hasSwitchedToFullScreenApp = !areWeOnActiveSpaceNative();
                     if(hasSwitchedToFullScreenApp) {
-                        NSArray<NSView*> *allViews = [trackedViews allValues];
+                        NSArray<NSView*> *allViews = trackedViews[pidRef];
                         for(NSView *cview in allViews) {
                             NSLog(@"View:%@", cview);
                             NSWindow *window = [cview window];
@@ -206,11 +242,10 @@ static bool rightMouseDown = false;
             NSLog(@"It appears the RS Window Closed");
         }
     } else {
-        NSLog(@"It appears the RS Window Closed");
+        NSLog(@"It appears the RS Application Terminated");
     }
     if([trackedWindows objectForKey:pidRef] != nil) {
-        NSNumber *rsWinIdRef = trackedWindows[pidRef];
-        CGWindowID rsWinId = [rsWinIdRef unsignedIntValue];
+        CGWindowID rsWinId = [trackedWindows[pidRef] unsignedIntValue];
         NSLog(@"Closing %u", rsWinId);
         [AOTrackedEvent IterateEvents:^BOOL(AOTrackedEvent* e) {
             return e.type == WindowEventType::Close && e.window == rsWinId;
@@ -218,30 +253,76 @@ static bool rightMouseDown = false;
             callback.Call({});
         }];
         [trackedWindows removeObjectForKey:pidRef];
-        [trackedViews removeAllObjects];
-        [rsWinIdRef release];
+        [trackedViews removeObjectForKey:pidRef];
+        [AOUtil handleRsDidTerminate:pid];
     }
     [pidRef release];
 }
 
-+ (void) handleAXActivate {
-    NSArray<NSView*> *allViews = [trackedViews allValues];
++ (void) handleRsDidLaunch:(pid_t)pid {
+    if(observers.find(pid) == observers.end()) {
+        AXUIElementRef appRef = AXUIElementCreateApplication(pid);
+        AXObserverRef obs;
+        AXError err = AXObserverCreate(pid, (AXObserverCallback) & ax_callback, &obs);
+        if(err == kAXErrorSuccess) {
+            observers[pid] = pair<AXUIElementRef, AXObserverRef>(appRef, obs);
+        }
+        if ([AOUtil updateNotifications:true forObserver:obs withAppRef:appRef withReferenceObj:nullptr withNotifications:kAXApplicationShownNotification, kAXApplicationHiddenNotification, kAXApplicationActivatedNotification,
+             kAXApplicationDeactivatedNotification, kAXWindowMiniaturizedNotification, kAXWindowDeminiaturizedNotification, kAXWindowMovedNotification,
+             kAXWindowResizedNotification, kAXUIElementDestroyedNotification, NULL]) {
+
+            CFRunLoopAddSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(obs), kCFRunLoopDefaultMode);
+            NSNumber* pidRef = @(pid);
+            NSLog(@"Notifications added for %@ because it was launched", pidRef);
+            CGWindowID windowId = [AOUtil appFocusedWindow:pid];
+            if(trackedWindows[pidRef] == nil) {
+                [AOTrackedEvent IterateEvents:^BOOL(AOTrackedEvent* e) {
+                    return e.type == WindowEventType::Show && e.window == 0;
+                } andCallback:[windowId, pid](Napi::Env env, Napi::Function callback) {
+                    NSLog(@"mac: Notified alt1 of new RS instance winid[%d] pid[%d]", windowId, pid);
+                    callback.Call({Napi::BigInt::New(env, (uint64_t)windowId), Napi::Number::New(env, 0)});
+                }];
+            }
+        }
+    } else {
+        NSLog(@"Already tracking %@", @(pid));
+    }
+}
+
++ (void) handleRsDidTerminate:(pid_t)pid {
+    if(observers.find(pid) != observers.end()) {
+        pair<AXUIElementRef, AXObserverRef> p = observers[pid];
+        AXUIElementRef appRef = p.first;
+        AXObserverRef obs = p.second;
+        if ([AOUtil updateNotifications:false forObserver:obs withAppRef:appRef withReferenceObj:NULL withNotifications:kAXApplicationShownNotification, kAXApplicationHiddenNotification, kAXApplicationActivatedNotification,
+             kAXApplicationDeactivatedNotification, kAXWindowMiniaturizedNotification, kAXWindowDeminiaturizedNotification, kAXWindowMovedNotification,
+             kAXWindowResizedNotification, kAXUIElementDestroyedNotification, NULL]) {
+            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(obs), kCFRunLoopDefaultMode);
+            NSLog(@"Notifications removed for %@ because it was terminated", @(pid));
+        }
+        observers.erase(pid);
+        _rsPid = 0;
+    }
+}
+
++ (void) handleAXActivate: (pid_t) pid {
+    NSArray<NSView*> *allViews = trackedViews[@(pid)];
     for(NSView *cview in allViews) {
         NSWindow *window = [cview window];
         [AOUtil updateWindow:window];
     }
 }
 
-+ (void) handleAXDeactivate {
-    NSArray<NSView*> *allViews = [trackedViews allValues];
++ (void) handleAXDeactivate: (pid_t) pid {
+    NSArray<NSView*> *allViews = trackedViews[@(pid)];
     for(NSView *cview in allViews) {
         NSWindow *window = [cview window];
         [AOUtil updateWindow:window];
     }
 }
 
-+ (void) handleAXMiniaturize {
-    NSArray<NSView*> *allViews = [trackedViews allValues];
++ (void) handleAXMiniaturize: (pid_t) pid {
+    NSArray<NSView*> *allViews = trackedViews[@(pid)];
     for(NSView *cview in allViews) {
         NSLog(@"View:%@", cview);
         NSWindow *window = [cview window];
@@ -250,8 +331,8 @@ static bool rightMouseDown = false;
 
 }
 
-+ (void) handleAXDeminiaturize {
-    NSArray<NSView*> *allViews = [trackedViews allValues];
++ (void) handleAXDeminiaturize: (pid_t) pid {
+    NSArray<NSView*> *allViews = trackedViews[@(pid)];
     for(NSView *cview in allViews) {
         NSLog(@"View:%@", cview);
         NSWindow *window = [cview window];
@@ -299,7 +380,8 @@ static bool rightMouseDown = false;
 }
 
 + (void) macOSNewWindowListener:(CGWindowID) window type: (WindowEventType) type callback: (Napi::Function) callback {
-    NSLog(@"PID: %d", [[NSRunningApplication currentApplication] processIdentifier]);
+    pid_t pid =  [AOUtil pidForWindow:window];
+    NSLog(@"AOPID: %@ Window: %@ Pid: %@", @([[NSRunningApplication currentApplication] processIdentifier]), @(window), @(pid));
     if(!ax_privilege()) {
         NSLog(@"alt1 will not work without accessibility permissions");
         exit(1);
@@ -320,76 +402,37 @@ static bool rightMouseDown = false;
     [AOUtil interceptDelegate:[view window]];
     NSInteger winnum = [[view window] windowNumber];
     NSNumber *winIdRef = @(winnum);
-    if (parent.handle.winid != 0) {
-        _rsPid = [AOUtil pidForWindow: parent.handle.winid];
-        NSLog(@"RSPID: %d, RSWIN: %@", _rsPid, @(parent.handle.winid));
-        NSNumber *pidRef = @(_rsPid);
+    if (parent.handle.winid == 0) {
+        NSLog(@"macOSSetWindowParent:remove: %lu => %lu", winnum, parent.handle.winid);
+        NSNumber *pidRef = trackedParents[winIdRef];
+        if(trackedViews[pidRef] != nil) {
+            NSMutableArray* views = trackedViews[pidRef];
+            [views removeObject:view];
+        }
+        [trackedParents removeObjectForKey:winIdRef];
+    } else {
+        NSLog(@"macOSSetWindowParent:add: %lu => %lu", winnum, parent.handle.winid);
+        pid_t pid = [AOUtil pidForWindow: parent.handle.winid];
+        if(_rsPid == 0) {
+            _rsPid = pid;
+        }
+        NSNumber *pidRef = @(pid);
         NSNumber *pwinIdRef = @(parent.handle.winid);
         trackedWindows[pidRef] = pwinIdRef;
-    }
-    NSLog(@"macOSSetWindowParent: %lu => %lu", winnum, parent.handle.winid);
-    NSLog(@"%@ %@ movable, %@ resizable", winIdRef, [view mouseDownCanMoveWindow] ? @"IS" : @"IS NOT", [[view window] isResizable] ? @"IS" : @"IS NOT");
-    AXUIElementRef appRef = NULL;
-    if (parent.handle.winid == 0) {
-        NSNumber *pidRef = winIdPidMap[winIdRef];
-        AXObserverRef obs;
-        if([winIdObsMap objectForKey:winIdRef] != nil) {
-            obs = (AXObserverRef) winIdObsMap[winIdRef];
-        } else {
-            NSLog(@"Unable to find observer for %@", winIdRef);
-            return;
-        }
-        if ([pidAppRefMap objectForKey:pidRef] != nil) {
-            appRef = (AXUIElementRef) pidAppRefMap[pidRef];
-        } else {
-            NSLog(@"Unable to find appref for %@", pidRef);
-            return;
-        }
-        if ([winIdObsMap objectForKey:winIdRef] != nil) {
-            [winIdObsMap removeObjectForKey:winIdRef];
-            if ([[winIdObsMap allValues] containsObject:(id)obs]) {
-                if ([AOUtil updateNotifications:false forObserver:obs withAppRef:appRef withReferenceObj:NULL withNotifications:kAXApplicationShownNotification, kAXApplicationHiddenNotification, kAXApplicationActivatedNotification,
-                     kAXApplicationDeactivatedNotification, kAXWindowMiniaturizedNotification, kAXWindowDeminiaturizedNotification, kAXWindowMovedNotification,
-                     kAXWindowResizedNotification, kAXUIElementDestroyedNotification, NULL]) {
-                    [trackedViews removeObjectForKey:@(winnum)];
-                    CFRunLoopRemoveSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(obs), kCFRunLoopDefaultMode);
-                    NSLog(@"Notifications removed for %@ because no more window ids exist for it", pidRef);
-                }
-            }
-        }
-    } else {
-        pid_t pid = [AOUtil pidForWindow: parent.handle.winid];
-        NSNumber *pidRef = @(pid);
-        winIdPidMap[winIdRef] = pidRef;
-        if ([pidAppRefMap objectForKey:pidRef] != nil) {
-            appRef = (AXUIElementRef) pidAppRefMap[pidRef];;
-        } else {
-            appRef = AXUIElementCreateApplication(pid);
-        }
-        pidAppRefMap[pidRef] = (id)appRef;
-        AXError err;
-        AXObserverRef obs;
-        err = AXObserverCreate(pid, (AXObserverCallback) & ax_callback, &obs);
-        if (err != kAXErrorSuccess) {
-            NSLog(@"Error creating observer: %d", err);
-            return;
-        } else {
-            NSLog(@"Setting observer for %@: %@", winIdRef, [NSValue valueWithPointer:obs]);
-            winIdObsMap[winIdRef] = (id)obs;
-        }
-        
-        if ([AOUtil updateNotifications:true forObserver:obs withAppRef:appRef withReferenceObj:nullptr withNotifications:kAXApplicationShownNotification, kAXApplicationHiddenNotification, kAXApplicationActivatedNotification,
-             kAXApplicationDeactivatedNotification, kAXWindowMiniaturizedNotification, kAXWindowDeminiaturizedNotification, kAXWindowMovedNotification,
-             kAXWindowResizedNotification, kAXUIElementDestroyedNotification, NULL]) {
-            [trackedViews setObject: view forKey: @(winnum)];
 
-            CFRunLoopAddSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(obs), kCFRunLoopDefaultMode);
+        if(trackedViews[pidRef] != nil) {
+            [trackedViews[pidRef] addObject:view];
+        } else {
+            NSMutableArray* views = [NSMutableArray arrayWithObject:view];
+            trackedViews[pidRef] = views;
         }
+        trackedParents[winIdRef] = pidRef;
     }
 }
 
 + (void) updateWindow:(NSWindow*) window {
-    if ([AOUtil isRsWindowActive]) {
+    [window invalidateShadow];
+    if ([AOUtil shouldBeOnTop]) {
         [window setLevel:NSScreenSaverWindowLevel];
         [window makeKeyAndOrderFront:nil];
     } else {
@@ -397,11 +440,8 @@ static bool rightMouseDown = false;
     }
 }
 
-+ (BOOL) isRsWindowActive {
-    pid_t aoPid = [[NSRunningApplication currentApplication] processIdentifier];
-    
-//    NSLog(@"F: %d, C: %d, one: %@ two: %@", _frontPid, aoPid, _frontPid == aoPid ? @"YES" : @"NO", _frontPid == _rsPid ? @"YES" : @"NO");
-    return _frontPid == aoPid || _frontPid == _rsPid;
++ (BOOL) shouldBeOnTop {
+    return _frontPid == [[NSRunningApplication currentApplication] processIdentifier] || _frontPid == _rsPid;
 }
 
 + (BOOL) isFullScreen:(CGRect) bounds {
@@ -429,8 +469,16 @@ static bool rightMouseDown = false;
 }
 
 + (pid_t) focusedPid {
-    NSRunningApplication *app = [[NSWorkspace sharedWorkspace] frontmostApplication];
-    return app.processIdentifier;
+    AXUIElementRef frontMostSys = AXUIElementCreateSystemWide();
+    AXUIElementRef frontMostApp;
+    if(kAXErrorSuccess == AXUIElementCopyAttributeValue(frontMostSys, kAXFocusedApplicationAttribute, (CFTypeRef*)&frontMostApp)) {
+        pid_t pid;
+        if(kAXErrorSuccess == AXUIElementGetPid(frontMostApp, &pid)) {
+            return pid;
+        }
+    }
+    
+    return 0;
 }
 
 + (pid_t) pidForWindow:(uintptr_t) winid {
@@ -468,7 +516,6 @@ static bool rightMouseDown = false;
     return entry;
 }
 
-
 + (CGWindowID) appFocusedWindow:(pid_t) pid {
     AXUIElementRef frontMostApp;
     AXUIElementRef frontMostWindow;
@@ -480,6 +527,32 @@ static bool rightMouseDown = false;
     AXError err = AXUIElementCopyAttributeValue(frontMostApp, kAXFocusedWindowAttribute, (CFTypeRef*)&frontMostWindow);
     if (err != kAXErrorSuccess) {
         NSLog(@"no focused window %@ %d", [NSValue valueWithPointer:frontMostApp], err);
+        CFRelease(frontMostApp);
+        return kCGNullWindowID;
+    }
+    CGWindowID windowId;
+    err = _AXUIElementGetWindow(frontMostWindow, &windowId);
+    if (err != kAXErrorSuccess) {
+        NSLog(@"no window id %d", err);
+        if (frontMostApp != nil) {
+            CFRelease(frontMostApp);
+        }
+        return kCGNullWindowID;
+    }
+    return windowId;
+}
+
++ (CGWindowID) appMainWindow:(pid_t) pid {
+    AXUIElementRef frontMostApp;
+    AXUIElementRef frontMostWindow;
+
+    // Get the frontMostApp
+    frontMostApp = AXUIElementCreateApplication(pid);
+
+    // Copy window attributes
+    AXError err = AXUIElementCopyAttributeValue(frontMostApp, kAXMainWindowAttribute, (CFTypeRef*)&frontMostWindow);
+    if (err != kAXErrorSuccess) {
+        NSLog(@"no main window %@ %d", [NSValue valueWithPointer:frontMostApp], err);
         CFRelease(frontMostApp);
         return kCGNullWindowID;
     }
@@ -604,7 +677,7 @@ static bool rightMouseDown = false;
     return id;
 }
 
-+(void) OSCaptureWindowMulti:(OSWindow) wnd withRects: (vector <CaptureRect>) rects {
++(void) capture:(OSWindow) wnd withRects: (vector <CaptureRect>) rects {
     CFDictionaryRef windowInfo = [AOUtil findWindow: wnd.handle.winid];
     if (windowInfo == nullptr) {
         printf("window nil - something changed!\n");
@@ -612,20 +685,14 @@ static bool rightMouseDown = false;
     }
     CGRect screenBounds;
     CGRectMakeWithDictionaryRepresentation((CFDictionaryRef) CFDictionaryGetValue(windowInfo, kCGWindowBounds), &screenBounds);
-//    BOOL isFs = [AOUtil isFullScreen: screenBounds];
     CGWindowID windowId = static_cast<CGWindowID>(wnd.handle.winid);
     CGImageRef scaledImageRef = CGWindowListCreateImage(CGRectNull, kCGWindowListOptionIncludingWindow, windowId, kCGWindowImageNominalResolution | kCGWindowImageBoundsIgnoreFraming);
-//    [AOUtil captureImageFile:scaledImageRef withInfo:@"fullimage" withBounds:screenBounds];
 
     for (vector<CaptureRect>::iterator it = rects.begin(); it != rects.end(); ++it) {
         CGRect iscreenBounds = CGRectMake((CGFloat) it->rect.x, (CGFloat) it->rect.y, (CGFloat) it->rect.width, (CGFloat) it->rect.height);
-        CGImageRef _imageRef = CGImageCreateWithImageInRect(scaledImageRef, iscreenBounds);
-        CGImageRef imageRef = [AOUtil CGImageResize:_imageRef toSize:iscreenBounds.size];
-        CGImageRelease(_imageRef);
-//        [AOUtil captureImageFile:imageRef withInfo:@"clip" withBounds:iscreenBounds];
-//        NSLog(@"C: (%d,%d) [%dx%d] ?? (%zu vs %d)", it->rect.x, it->rect.y, it->rect.width, it->rect.height, it->size, 4 * it->rect.width * it->rect.height);
+        CGImageRef imageRef = [AOUtil redrawImage:CGImageCreateWithImageInRect(scaledImageRef, iscreenBounds)];
 
-        if (![AOUtil CGImageResizeGetBytesByScale: imageRef withScale:1.0 andData:it->data]) {
+        if (![AOUtil drawImage: imageRef ontoBuffer:it->data withScale:1.0 ]) {
             fprintf(stderr, "error: could not copy image data\n");
         }
         CGImageRelease(imageRef);
@@ -633,13 +700,13 @@ static bool rightMouseDown = false;
     CGImageRelease(scaledImageRef);
 }
 
-
-+ (CGImageRef) CGImageResize:(CGImageRef) image toSize: (CGSize) maxSize {
-    // calculate size
-//    CGFloat ratio = MAX(CGImageGetWidth(image) / maxSize.width, CGImageGetHeight(image) / maxSize.height);
+/*
+ Redraws the input image returning the result and releasing the original image.
+ */
++ (CGImageRef) redrawImage:(CGImageRef) image {
     size_t width = CGImageGetWidth(image);
     size_t height = CGImageGetHeight(image);
-    // resize
+    // redraw with sRGB
     CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
     CGContextRef context = CGBitmapContextCreate(NULL, width, height, 8, width * 4, colorspace, kCGImageAlphaPremultipliedLast);
     CGColorSpaceRelease(colorspace);
@@ -650,10 +717,11 @@ static bool rightMouseDown = false;
     // extract resulting image from context
     CGImageRef imgRef = CGBitmapContextCreateImage(context);
     CGContextRelease(context);
+    CGImageRelease(image);
     return imgRef;
 }
 
-+ (BOOL) CGImageResizeGetBytesByScale:(CGImageRef) image withScale: (CGFloat) scale andData: (void *)theData {
++ (BOOL) drawImage:(CGImageRef) image ontoBuffer: (void *)theData withScale: (CGFloat) scale {
     // calculate size
     size_t width = CGImageGetWidth(image) / static_cast<size_t>(scale);
     size_t height = CGImageGetHeight(image) / static_cast<size_t>(scale);
@@ -670,14 +738,12 @@ static bool rightMouseDown = false;
     return true;
 }
 
-+ (void) captureImageFile:(CGImageRef) imageRef withInfo: (NSString*) str withBounds: (CGRect) rect {
-    NSString *format = @"/Users/user/Desktop/ss/%@_%@_window_%0.0f_%0.0f_%0.0fx%0.0f.png";
-    NSString *name = [NSString stringWithFormat:format, @"rsclient", str, rect.origin.x, rect.origin.y, rect.size.width, rect.size.height];
-    bool b = [[NSFileManager defaultManager] fileExistsAtPath:name];
++ (void) captureImageFile:(CGImageRef) imageRef withFilename: (NSString*)filename {
+    bool b = [[NSFileManager defaultManager] fileExistsAtPath:filename];
     if(b) {
         return;
     }
-    CFURLRef fileURL = static_cast<CFURLRef>([NSURL fileURLWithPath:name]);
+    CFURLRef fileURL = static_cast<CFURLRef>([NSURL fileURLWithPath:filename]);
     CGImageDestinationRef destination = CGImageDestinationCreateWithURL(fileURL, CFSTR("public.png"), 1, nullptr);
     CGImageDestinationAddImage(destination, imageRef, nullptr);
     CGImageDestinationFinalize(destination);
@@ -707,12 +773,12 @@ static bool rightMouseDown = false;
         } else {
             err = AXObserverRemoveNotification(obs, appRef, current);
         }
-        if (err != kAXErrorSuccess) {
-            NSLog(@"error %@ notification %@: %d", (add ? @"adding" : @"removing"), current, err);
-            va_end(args);
-            return false;
-        } else {
+        if (err == kAXErrorSuccess) {
             NSLog(@"%@ %@ notification!", (add ? @"added" : @"removed"), current);
+        } else {
+//            NSLog(@"error %@ notification %@: %d", (add ? @"adding" : @"removing"), current, err);
+//            va_end(args);
+//            return false;
         }
         current = va_arg(args, CFStringRef);
     }
