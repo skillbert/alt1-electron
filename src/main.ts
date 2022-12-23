@@ -147,14 +147,21 @@ function drawTray() {
 		tray.on("click", e => tray!.popUpContextMenu());
 	}
 	tray.setToolTip("Alt1 Lite");
-	let menu: MenuItemConstructorOptions[] = [];
+	let apps: MenuItemConstructorOptions[] = [];
 	for (let app of settings.bookmarks) {
-		menu.push({
+		apps.push({
 			label: app.appName,
 			icon: app.iconCached ? nativeImage.createFromDataURL(app.iconCached).resize({ height: 20, width: 20 }) : undefined,
 			click: openApp.bind(null, app, undefined),
 		});
 	}
+
+	let menu: MenuItemConstructorOptions[] = [{
+		label: "Apps",
+		type: "submenu",
+		submenu: apps
+	}];
+
 	if (process.env.NODE_ENV === "development") {
 		menu.push({ type: "separator" });
 		menu.push({
