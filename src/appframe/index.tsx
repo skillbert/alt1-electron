@@ -81,9 +81,9 @@ function AppFrame(p: {}) {
 				<BorderEl ver="bot" hor="right" />
 			</div>
 			<div className="buttonroot" ref={buttonroot}>
-				<div className="button" onClick={e => close()} />
-				<div className="button" onClick={e => setMinimized(!minimized)} />
-				<div className="button" onMouseDown={toggleDevTools} />
+				<div className="button button-close" onClick={e => close()} />
+				<div className={`button ${minimized ? "button-restore" : "button-minimize"}`} onClick={e => setMinimized(!minimized)} />
+				<div className="button button-settings" onMouseDown={toggleDevTools} />
 				<div className="dragbutton" onMouseDown={e => startDrag(e, true, true, true, true)} />
 			</div>
 		</div>
