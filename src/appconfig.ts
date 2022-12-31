@@ -36,7 +36,7 @@ async function tryUpdateIcon(bm: Bookmark) {
 	}
 }
 
-export function installApp(url: URL, res: AppConfigImport) {
+export async function installApp(url: URL, res: AppConfigImport) {
 	if (settings.bookmarks.find(a => a.configUrl == url.href)) {
 		throw new UserError("App is already installed");
 	}
@@ -59,10 +59,10 @@ export function installApp(url: URL, res: AppConfigImport) {
 		wasOpen: false
 	};
 	settings.bookmarks.push(config);
-	updateAppconfig(config, res);
+	await updateAppconfig(config, res);
 	return config;
 }
-function updateAppconfig(prev: Bookmark, config: AppConfigImport) {
+async function updateAppconfig(prev: Bookmark, config: AppConfigImport) {
 
 	let entryurl = sameDomainResolve(prev.configUrl, config.appUrl);
 	let iconurl = sameDomainResolve(prev.configUrl, config.iconUrl);
@@ -78,6 +78,7 @@ function updateAppconfig(prev: Bookmark, config: AppConfigImport) {
 	prev.defaultWidth = config.defaultWidth;
 	prev.defaultHeight = config.defaultHeight;
 	tryUpdateIcon(prev);
+	await tryUpdateIcon(prev);
 	updateTray();
 }
 
@@ -94,9 +95,19 @@ export async function identifyApp(url: URL) {
 	if (!prev) {
 		//throw new Error("App is not installed yet");
 		//TODO add app confirm ui
-		return installApp(url, config);
+		return await installApp(url, config);
 	} else {
 		updateAppconfig(prev, config);
 		return prev;
 	}
+}
+
+export function uninstallApp(url: string) {
+	let idx = settings.bookmarks.findIndex(a => a.configUrl == url);
+	if (idx == -1) {
+		throw new UserError("App is already uninstalled");
+	}
+
+	settings.bookmarks.splice(idx, 1);
+	updateTray();
 }

@@ -47,7 +47,8 @@ var checkSettings = Checks.obj({
 });
 
 
-export var settings: UservarType<typeof checkSettings>
+export type settingsType = UservarType<typeof checkSettings>;
+export var settings: settingsType;
 
 export async function loadSettings() {
 	try {

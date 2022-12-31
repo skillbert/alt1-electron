@@ -1,8 +1,8 @@
 import * as a1lib from "@alt1/base/dist";
 import { IpcMain, IpcMainEvent, IpcMainInvokeEvent, screen } from "electron/main"
-import { identifyApp } from "./appconfig";
+import { identifyApp, uninstallApp } from "./appconfig";
 import { sameDomainResolve } from "./lib";
-import { fixTooltip, getManagedAppWindow, ManagedWindow } from "./main";
+import { admins, fixTooltip, getManagedAppWindow, ManagedWindow, openApp } from "./main";
 import { native } from "./native";
 import { settings } from "./settings";
 import { FlatImageData, OverlayCommand, Rectangle, RsClientState } from "./shared";
@@ -18,6 +18,10 @@ function expectAppWindow(e: IpcMainEvent | IpcMainInvokeEvent) {
 	return wnd;
 }
 
+function isAdmin(e: IpcMainEvent | IpcMainInvokeEvent) {
+	// throw new Error("Sender not authorized to make admin request");
+	return admins.indexOf(e.sender.id) != -1;
+}
 
 function detectCornerEdge(img: FlatImageData, rect: a1lib.Rect, hor: boolean, reverse: boolean, thresh: number) {
 	if (!hor) {
@@ -250,4 +254,50 @@ export function initIpcApi(ipcMain: IpcMain) {
 	ipcMain.on("shape", syncwrap((e, wnd: BigInt, rects: Rectangle[]) => {
 		native.setWindowShape(wnd, rects);
 	}));
+
+	ipcMain.handle("openapp", async (e, url) => {
+		try {
+			if (isAdmin(e)) {
+				let app = settings.bookmarks.find(a => a.configUrl == url);
+				if (!app) {
+					return { error: "App not found" };
+				} else {
+					openApp(app);
+					return {};
+				}
+			}
+		} catch (err) {
+			console.error(err);
+		}
+	});
+
+	ipcMain.handle("removeapp", async (e, url) => {
+		try {
+			if (isAdmin(e)) {
+				uninstallApp(url);
+			}
+		} catch (err) {
+			console.error(err);
+		}
+	});
+
+	ipcMain.handle("installapp", async (e, url) => {
+		try {
+			if (isAdmin(e)) {
+				await identifyApp(new URL(url));
+			}
+		} catch (err) {
+			console.error(err);
+		}
+	});
+
+	ipcMain.handle("getsettings", (e) => {
+		try {
+			if (isAdmin(e)) {
+				return settings;
+			}
+		} catch (err) {
+			console.error(err);
+		} 
+	})
 }
