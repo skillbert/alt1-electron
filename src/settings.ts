@@ -51,7 +51,7 @@ export var settings: UservarType<typeof checkSettings>
 
 export async function loadSettings() {
 	try {
-		let file = JSON.parse(fs.readFileSync("./config.json", "utf8"));
+		let file = JSON.parse(fs.readFileSync(configFile, "utf8"));
 		settings = checkSettings.load(file, { defaultOnError: true });
 	} catch (e) {
 		console.log("couldn't load config");
