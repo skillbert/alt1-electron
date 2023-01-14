@@ -19,7 +19,6 @@ function expectAppWindow(e: IpcMainEvent | IpcMainInvokeEvent) {
 }
 
 function isAdmin(e: IpcMainEvent | IpcMainInvokeEvent) {
-	// throw new Error("Sender not authorized to make admin request");
 	return admins.indexOf(e.sender.id) != -1;
 }
 
@@ -256,48 +255,32 @@ export function initIpcApi(ipcMain: IpcMain) {
 	}));
 
 	ipcMain.handle("openapp", async (e, url) => {
-		try {
-			if (isAdmin(e)) {
-				let app = settings.bookmarks.find(a => a.configUrl == url);
-				if (!app) {
-					return { error: "App not found" };
-				} else {
-					openApp(app);
-					return {};
-				}
+		if (isAdmin(e)) {
+			let app = settings.bookmarks.find(a => a.configUrl == url);
+			if (!app) {
+				return { error: "App not found" };
+			} else {
+				openApp(app);
+				return {};
 			}
-		} catch (err) {
-			console.error(err);
 		}
 	});
 
 	ipcMain.handle("removeapp", async (e, url) => {
-		try {
-			if (isAdmin(e)) {
-				uninstallApp(url);
-			}
-		} catch (err) {
-			console.error(err);
+		if (isAdmin(e)) {
+			uninstallApp(url);
 		}
 	});
 
 	ipcMain.handle("installapp", async (e, url) => {
-		try {
-			if (isAdmin(e)) {
-				await identifyApp(new URL(url));
-			}
-		} catch (err) {
-			console.error(err);
+		if (isAdmin(e)) {
+			await identifyApp(new URL(url));
 		}
 	});
 
 	ipcMain.handle("getsettings", (e) => {
-		try {
-			if (isAdmin(e)) {
-				return settings;
-			}
-		} catch (err) {
-			console.error(err);
-		} 
+		if (isAdmin(e)) {
+			return settings;
+		}
 	})
 }

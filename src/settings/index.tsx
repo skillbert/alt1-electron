@@ -1,6 +1,6 @@
 import { ipcRenderer } from "electron";
-import { settingsType, Bookmark } from "../settings";
-import { CaptureMode } from "../native";
+import type { settingsType, Bookmark } from "../settings";
+import type { CaptureMode } from "../native";
 import * as React from "react";
 import * as ReactDom from "react-dom";
 
