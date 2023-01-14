@@ -41,7 +41,7 @@ process.chdir(__dirname);
 if (!app.requestSingleInstanceLock()) { app.exit(); }
 app.setAsDefaultProtocolClient(schemestring, undefined, [__non_webpack_require__.main!.filename]);
 handleSchemeArgs(process.argv);
-loadSettings();
+loadSettings(); // Cannot await on top-level, so if config is missing, default settings are loaded later
 remoteMain.initialize();
 
 app.on("before-quit", e => {
@@ -142,12 +142,7 @@ export class ManagedWindow {
 	}
 }
 
-function drawTray() {
-	if (!tray) {
-		tray = new Tray(alt1icon);
-		tray.on("click", e => tray!.popUpContextMenu());
-	}
-	tray.setToolTip("Alt1 Lite");
+export function updateTray() {
 	let menu: MenuItemConstructorOptions[] = [];
 	for (let app of settings.bookmarks) {
 		menu.push({
@@ -175,7 +170,16 @@ function drawTray() {
 	menu.push({ label: "Settings", click: showSettings });
 	menu.push({ label: "Exit", click: e => app.quit() });
 	let menuinst = Menu.buildFromTemplate(menu);
-	tray.setContextMenu(menuinst);
+	tray?.setContextMenu(menuinst);
+}
+
+function drawTray() {
+	if (!tray) {
+		tray = new Tray(alt1icon);
+		tray.on("click", e => tray!.popUpContextMenu());
+	}
+	tray.setToolTip("Alt1 Lite");
+	updateTray();
 }
 
 let settingsWnd: BrowserWindow | null = null;

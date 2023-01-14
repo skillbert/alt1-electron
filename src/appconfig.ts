@@ -1,4 +1,4 @@
-import { } from "./main";
+import { updateTray } from "./main";
 import { readJsonWithBOM, sameDomainResolve, UserError } from "./lib";
 import fetch from "node-fetch";
 import { Bookmark, settings } from "./settings";
@@ -58,8 +58,9 @@ export async function installApp(url: URL, res: AppConfigImport) {
 		lastRect: null,
 		wasOpen: false
 	};
-	await updateAppconfig(config, res);
+	
 	settings.bookmarks.push(config);
+	await updateAppconfig(config, res);
 	return config;
 }
 async function updateAppconfig(prev: Bookmark, config: AppConfigImport) {
@@ -77,8 +78,9 @@ async function updateAppconfig(prev: Bookmark, config: AppConfigImport) {
 	prev.maxHeight = config.maxHeight;
 	prev.defaultWidth = config.defaultWidth;
 	prev.defaultHeight = config.defaultHeight;
-	tryUpdateIcon(prev);
+
 	await tryUpdateIcon(prev);
+	updateTray();
 }
 
 export async function identifyApp(url: URL) {
