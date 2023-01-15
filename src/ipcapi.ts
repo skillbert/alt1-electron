@@ -18,7 +18,7 @@ function expectAppWindow(e: IpcMainEvent | IpcMainInvokeEvent) {
 }
 
 function isAdmin(e: IpcMainEvent | IpcMainInvokeEvent) {
-	return admins.indexOf(e.sender.id) != -1;
+	return admins.has(e.sender.id);
 }
 
 function detectCornerEdge(img: FlatImageData, rect: a1lib.Rect, hor: boolean, reverse: boolean, thresh: number) {

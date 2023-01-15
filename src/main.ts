@@ -19,7 +19,7 @@ if (process.env.NODE_ENV === "development") {
 	(global as any).Alt1lite = require("./main");
 }
 
-export const admins: number[] = [];
+export const admins = new Set<number>();
 export const managedWindows: ManagedWindow[] = [];
 export function getManagedWindow(w: WebContents) { return managedWindows.find(q => q.window.webContents == w); }
 export function getManagedAppWindow(id: number) { return managedWindows.find(q => q.appFrameId == id || q.window.webContents.id == id); }
@@ -199,11 +199,11 @@ export function showSettings() {
 	});
 	settingsWnd.loadFile(path.resolve(__dirname, "settings/index.html"));
 	settingsWnd.once("close", e => {
-		admins.splice(admins.indexOf(settingsWnd!.webContents.id), 1);
+		admins.delete(settingsWnd!.webContents.id);
 		settingsWnd = null;
 	});
 	remoteMain.enable(settingsWnd.webContents);
-	admins.push(settingsWnd.webContents.id);
+	admins.add(settingsWnd.webContents.id);
 }
 
 //TODO add permission
