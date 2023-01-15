@@ -1,12 +1,15 @@
 import Checks, { UservarType } from "../tempexternal/typecheck";
 import * as fs from "fs";
 import { configFile, readJsonWithBOM, weborigin } from "./lib";
-import { identifyApp } from "./appconfig";
 import fetch from "node-fetch";
 import { CaptureMode } from "./native";
+import { TypedEmitter } from "./typedemitter";
+import { AppConfig } from "./appconfig";
 
 export type AppPermission = UservarType<typeof checkPermission>;
 export type PinRect = UservarType<typeof checkPinRect>;
+export type Bookmark = UservarType<typeof checkBookmark>;
+export type Settings = UservarType<typeof checkSettings>;
 
 var checkPermission = Checks.strenum({ "pixel": "Pixel", "overlay": "Overlay", "game": "Game Data" });
 
@@ -39,33 +42,66 @@ var checkBookmark = Checks.obj({
 	iconCachedTime: Checks.num(),
 });
 
-export type Bookmark = UservarType<typeof checkBookmark>;
-
 var checkSettings = Checks.obj({
 	captureMode: Checks.strenum<CaptureMode>({ desktop: "Desktop", opengl: "OpenGL", window: "Window" }, "window"),
 	bookmarks: Checks.arr(checkBookmark)
 });
 
+type SettingsEvents = {
+	changed: []
+}
 
-export var settings: UservarType<typeof checkSettings>
+class ManagedSettings extends TypedEmitter<SettingsEvents> {
+	settings: Settings;
+	appconfig: AppConfig;
+	path: string;
 
-export async function loadSettings() {
-	try {
-		let file = JSON.parse(fs.readFileSync(configFile, "utf8"));
-		settings = checkSettings.load(file, { defaultOnError: true });
-	} catch (e) {
-		console.log("couldn't load config");
-		settings = checkSettings.default();
+	constructor(path: string) {
+		super();
+		this.path = path;
+		this.settings = checkSettings.default();
+		this.appconfig = new AppConfig(this.settings.bookmarks);
+		this.appconfig.on("changed", () => this.emit("changed"));
+	}
 
-		await fetch(`${weborigin}/data/alt1/defaultapps.json`).then(r => readJsonWithBOM(r)).then(async (r: { folder: string, name: string, url: string }[]) => {
-			for (let appbase of r) {
-				await identifyApp(new URL(`${weborigin}${appbase.url}`));
-			}
-		});
+	/**
+	 * Load settings from file, or fetch the default if it fails.
+	 * Called on top-level, where await is not possible. Default settings are loaded in the background.
+	 */
+	loadOrFetch() {
+		try {
+			let file = JSON.parse(fs.readFileSync(this.path, "utf8"));
+			this.settings = checkSettings.load(file, { defaultOnError: true });
+			this.appconfig.setBookmarks(this.settings.bookmarks);
+		} catch (e) {
+			console.log("couldn't load config");
+			this.settings = checkSettings.default();
+			this.appconfig.setBookmarks(this.settings.bookmarks);
+	
+			fetch(`${weborigin}/data/alt1/defaultapps.json`).then(r => readJsonWithBOM(r)).then(async (r: { folder: string, name: string, url: string }[]) => {
+				for (let appbase of r) {
+					await this.appconfig.identifyApp(new URL(`${weborigin}${appbase.url}`));
+				}
+			});
+		}
+		this.emit("changed");
+	}
+
+	save() {
+		let data = JSON.stringify(checkSettings.store(this.settings), undefined, "\t");
+		fs.writeFileSync(this.path, data, { encoding: "utf8" });
+	}
+
+	get captureMode() {
+		return this.settings.captureMode;
+	}
+
+	/**
+	 * Emit the "changed" event on AppConfig if the contents of this array are modified.
+	 */
+	get bookmarks() {
+		return this.settings.bookmarks;
 	}
 }
 
-export function saveSettings() {
-	let data = JSON.stringify(checkSettings.store(settings), undefined, "\t");
-	fs.writeFileSync(configFile, data, { encoding: "utf8" });
-}
+export var settings = new ManagedSettings(configFile);
