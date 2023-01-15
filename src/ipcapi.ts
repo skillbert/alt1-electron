@@ -1,6 +1,5 @@
 import * as a1lib from "@alt1/base/dist";
 import { IpcMain, IpcMainEvent, IpcMainInvokeEvent, screen } from "electron/main"
-import { identifyApp, uninstallApp } from "./appconfig";
 import { sameDomainResolve } from "./lib";
 import { admins, fixTooltip, getManagedAppWindow, ManagedWindow, openApp } from "./main";
 import { native } from "./native";
@@ -194,7 +193,7 @@ export function initIpcApi(ipcMain: IpcMain) {
 	ipcMain.on("identifyapp", async (e, configurl) => {
 		try {
 			let url = sameDomainResolve(e.sender.getURL(), configurl);
-			await identifyApp(url);
+			await settings.appconfig.identifyApp(url);
 		} catch (e) {
 			console.error(e);
 		}
@@ -257,30 +256,29 @@ export function initIpcApi(ipcMain: IpcMain) {
 	ipcMain.handle("openapp", async (e, url) => {
 		if (isAdmin(e)) {
 			let app = settings.bookmarks.find(a => a.configUrl == url);
-			if (!app) {
-				return { error: "App not found" };
-			} else {
+			if (app) {
 				openApp(app);
-				return {};
+			} else {
+				console.log(`Cannot find app in bookmarks ${url}`);
 			}
 		}
 	});
 
 	ipcMain.handle("removeapp", async (e, url) => {
 		if (isAdmin(e)) {
-			uninstallApp(url);
+			settings.appconfig.uninstallApp(url);
 		}
 	});
 
 	ipcMain.handle("installapp", async (e, url) => {
 		if (isAdmin(e)) {
-			await identifyApp(new URL(url));
+			await settings.appconfig.identifyApp(new URL(url));
 		}
 	});
 
 	ipcMain.handle("getsettings", (e) => {
 		if (isAdmin(e)) {
-			return settings;
+			return settings.settings;
 		}
 	})
 }

@@ -1,8 +1,10 @@
-import { updateTray } from "./main";
 import { readJsonWithBOM, sameDomainResolve, UserError } from "./lib";
 import fetch from "node-fetch";
-import { Bookmark, settings } from "./settings";
+import { Bookmark } from "./settings";
 import Checks, { UservarType } from "../tempexternal/typecheck";
+import { TypedEmitter } from "./typedemitter";
+
+export type AppConfigImport = UservarType<typeof checkAppConfigImport>;
 
 var checkAppConfigImport = Checks.obj({
 	appName: Checks.str(),
@@ -18,7 +20,6 @@ var checkAppConfigImport = Checks.obj({
 	maxHeight: Checks.num(10000),
 	permissions: Checks.arr(Checks.strenum({ pixel: "Pixel", game: "Gamestate", overlay: "Overlay" }))
 });
-export type AppConfigImport = UservarType<typeof checkAppConfigImport>;
 
 async function tryUpdateIcon(bm: Bookmark) {
 	try {
@@ -36,78 +37,104 @@ async function tryUpdateIcon(bm: Bookmark) {
 	}
 }
 
-export async function installApp(url: URL, res: AppConfigImport) {
-	if (settings.bookmarks.find(a => a.configUrl == url.href)) {
-		throw new UserError("App is already installed");
+type AppConfigEvents = {
+	"changed": []
+}
+
+export class AppConfig extends TypedEmitter<AppConfigEvents> {
+	private bookmarks: Bookmark[];
+
+	constructor(bookmarks: Bookmark[]) {
+		super();
+		this.bookmarks = bookmarks;
 	}
-	let config: Bookmark = {
-		appName: "",
-		description: "",
-		configUrl: url.href,
-		appUrl: "",
-		iconUrl: "",
-		iconCached: "",
-		iconCachedTime: 0,
-		defaultHeight: 500,
-		defaultWidth: 370,
-		minHeight: 20,
-		minWidth: 20,
-		maxWidth: 0,
-		maxHeight: 0,
-		permissions: [],
-		lastRect: null,
-		wasOpen: false
-	};
+
+	setBookmarks(bookmarks: Bookmark[]) {
+		this.bookmarks = bookmarks;
+		this.emit("changed");
+	}
+
+	resetWasOpen() {
+		for (let b of this.bookmarks) {
+			b.wasOpen = false;
+		}
+		this.emit("changed");
+	}
+
+	async installApp(url: URL, res: AppConfigImport) {
+		if (this.bookmarks.find(a => a.configUrl == url.href)) {
+			throw new UserError("App is already installed");
+		}
+		let config: Bookmark = {
+			appName: "",
+			description: "",
+			configUrl: url.href,
+			appUrl: "",
+			iconUrl: "",
+			iconCached: "",
+			iconCachedTime: 0,
+			defaultHeight: 500,
+			defaultWidth: 370,
+			minHeight: 20,
+			minWidth: 20,
+			maxWidth: 0,
+			maxHeight: 0,
+			permissions: [],
+			lastRect: null,
+			wasOpen: false
+		};
+		
+		this.bookmarks.push(config);
+		await this.updateAppconfig(config, res);
+		return config;
+	}
+
+	private async updateAppconfig(prev: Bookmark, config: AppConfigImport) {
+		let entryurl = sameDomainResolve(prev.configUrl, config.appUrl);
+		let iconurl = sameDomainResolve(prev.configUrl, config.iconUrl);
 	
-	settings.bookmarks.push(config);
-	await updateAppconfig(config, res);
-	return config;
-}
-async function updateAppconfig(prev: Bookmark, config: AppConfigImport) {
-
-	let entryurl = sameDomainResolve(prev.configUrl, config.appUrl);
-	let iconurl = sameDomainResolve(prev.configUrl, config.iconUrl);
-
-	prev.appName = config.appName;
-	prev.description = config.description;
-	prev.appUrl = entryurl.href;
-	prev.iconUrl = iconurl.href;
-	prev.minWidth = config.minWidth;
-	prev.minHeight = config.minHeight;
-	prev.maxWidth = config.maxWidth;
-	prev.maxHeight = config.maxHeight;
-	prev.defaultWidth = config.defaultWidth;
-	prev.defaultHeight = config.defaultHeight;
-
-	await tryUpdateIcon(prev);
-	updateTray();
-}
-
-export async function identifyApp(url: URL) {
-	try {
-		let res: unknown = await fetch(url.href).then(r => readJsonWithBOM(r));
-		var config = checkAppConfigImport.load(res, { defaultOnError: true });
-	} catch (e) {
-		console.log("failed to load appconfig from url: " + url);
-		return;
-	}
-	//TODO typecheck result
-	let prev = settings.bookmarks.find(q => q.configUrl == url.href);
-	if (!prev) {
-		//throw new Error("App is not installed yet");
-		//TODO add app confirm ui
-		return await installApp(url, config);
-	} else {
-		updateAppconfig(prev, config);
-		return prev;
-	}
-}
-
-export function uninstallApp(url: string) {
-	let idx = settings.bookmarks.findIndex(a => a.configUrl == url);
-	if (idx == -1) {
-		throw new UserError("App is already uninstalled");
+		prev.appName = config.appName;
+		prev.description = config.description;
+		prev.appUrl = entryurl.href;
+		prev.iconUrl = iconurl.href;
+		prev.minWidth = config.minWidth;
+		prev.minHeight = config.minHeight;
+		prev.maxWidth = config.maxWidth;
+		prev.maxHeight = config.maxHeight;
+		prev.defaultWidth = config.defaultWidth;
+		prev.defaultHeight = config.defaultHeight;
+	
+		await tryUpdateIcon(prev);
+		this.emit("changed");
 	}
 
-	settings.bookmarks.splice(idx, 1);
+	async identifyApp(url: URL) {
+		try {
+			let res: unknown = await fetch(url.href).then(r => readJsonWithBOM(r));
+			var config = checkAppConfigImport.load(res, { defaultOnError: true });
+		} catch (e) {
+			console.log("failed to load appconfig from url: " + url);
+			return;
+		}
+		//TODO typecheck result
+		let app = this.bookmarks.find(q => q.configUrl == url.href);
+		if (!app) {
+			//throw new Error("App is not installed yet");
+			//TODO add app confirm ui
+			app = await this.installApp(url, config);
+		} else {
+			await this.updateAppconfig(app, config);
+		}
+		return app;
+	}
+
+	uninstallApp(url: string) {
+		let idx = this.bookmarks.findIndex(a => a.configUrl == url);
+		if (idx == -1) {
+			throw new UserError("App is already uninstalled");
+		}
+	
+		this.bookmarks.splice(idx, 1);
+		this.emit("changed");
+	}
 }

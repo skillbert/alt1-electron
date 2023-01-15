@@ -1,5 +1,5 @@
 import { ipcRenderer } from "electron";
-import type { settingsType, Bookmark } from "../settings";
+import type { Settings, Bookmark } from "../settings";
 import type { CaptureMode } from "../native";
 import * as React from "react";
 import * as ReactDom from "react-dom";
@@ -8,21 +8,24 @@ import "./style.scss";
 import "./index.html";
 
 window.addEventListener("DOMContentLoaded", start);
+ipcRenderer.on("settings-changed", e => {
+	start();
+});
 
 async function start() {
-	let settings: settingsType = await ipcRenderer.invoke("getsettings");
-	ReactDom.render(<Settings settings={settings} />, document.getElementById("root"));
+	let settings: Settings = await ipcRenderer.invoke("getsettings");
+	ReactDom.render(<SettingsComponent settings={settings} />, document.getElementById("root"));
 }
 
 interface SettingsProps {
-	settings: settingsType;
+	settings: Settings;
 }
 
 interface SettingsState {
 	tab: string;
 }
 
-class Settings extends React.Component<SettingsProps, SettingsState> {
+class SettingsComponent extends React.Component<SettingsProps, SettingsState> {
 	constructor(props) {
 		super(props);
 		this.state = {
@@ -67,22 +70,23 @@ class AppSettings extends React.Component<AppSettingsProps, AppSettingsState> {
 	}
 
 	addAppSubmit(e) {
-		ipcRenderer.invoke("installapp", this.state.configUrl).then(() => start());
+		ipcRenderer.invoke("installapp", this.state.configUrl);
+		this.setState({configUrl: ""});
 		e.preventDefault();
 	}
 
 	render() {
 		let apps = this.props.bookmarks.map(i => {
-			return <tr>
+			return <tr key={i.appUrl}>
 				<td><img width={20} height={20} src={i.iconCached}/></td>
 				<td><span>{i.appName}</span></td>
 				<td><button onClick={() => ipcRenderer.invoke("openapp", i.configUrl)}>Open</button></td>
-				<td><button onClick={() => ipcRenderer.invoke("removeapp", i.configUrl).then(() => start())}>Remove</button></td>
+				<td><button onClick={() => ipcRenderer.invoke("removeapp", i.configUrl)}>Remove</button></td>
 			</tr>;
 		})
 
 		return <React.Fragment>
-			<table>{apps}</table>
+			<table><tbody>{apps}</tbody></table>
 			<hr/>
 			<form onSubmit={this.addAppSubmit.bind(this)}>
 				<label>Config URL <input type="text" value={this.state.configUrl} onChange={e => this.setState({configUrl: e.target.value})}/></label>
@@ -98,7 +102,6 @@ function CaptureSettings(props) {
 
 	let modechange = (e: React.ChangeEvent<HTMLInputElement>) => {
 		captureMode = e.currentTarget.value as any;
-		start();
 	}
 	return (
 		<React.Fragment>
@@ -106,7 +109,7 @@ function CaptureSettings(props) {
 			<label><input type="radio" value="opengl" name="captmode" onChange={modechange} checked={captureMode == "opengl"} />OpenGL</label>
 			<label><input type="radio" value="window" name="captmode" onChange={modechange} checked={captureMode == "window"} />Window</label>
 			<label><input type="radio" value="desktop" name="captmode" onChange={modechange} checked={captureMode == "desktop"} />Desktop</label>
-			<label><input type="checkbox" onChange={e => { e.currentTarget.checked = true; start(); }} checked={true} />Automatically detect capture mode</label>
+			<label><input type="checkbox" onChange={e => { e.currentTarget.checked = true; }} checked={true} />Automatically detect capture mode</label>
 		</React.Fragment>
 	);
 }

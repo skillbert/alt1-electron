@@ -4,12 +4,10 @@ import * as path from "path";
 import { Menu, Tray } from "electron/main";
 import { MenuItemConstructorOptions, nativeImage } from "electron/common";
 import { handleSchemeArgs } from "./schemehandler";
-import { patchImageDataShow, relPath, sameDomainResolve, schemestring } from "./lib";
-import { identifyApp } from "./appconfig";
-import { getActiveWindow, native, OSWindow, OSWindowPin, reloadAddon } from "./native";
+import { patchImageDataShow, relPath, schemestring } from "./lib";
+import { getActiveWindow, OSWindow, OSWindowPin, reloadAddon } from "./native";
 import { detectInstances, getRsInstanceFromWnd, RsInstance, rsInstances, initRsInstanceTracking, stopRsInstanceTracking } from "./rsinstance";
-import { OverlayCommand, Rectangle, RsClientState } from "./shared";
-import { AppPermission, Bookmark, loadSettings, saveSettings, settings } from "./settings";
+import { AppPermission, Bookmark, settings } from "./settings";
 import { boundMethod } from "autobind-decorator";
 import * as remoteMain from "@electron/remote/main";
 import { initIpcApi } from "./ipcapi";
@@ -41,13 +39,19 @@ process.chdir(__dirname);
 if (!app.requestSingleInstanceLock()) { app.exit(); }
 app.setAsDefaultProtocolClient(schemestring, undefined, [__non_webpack_require__.main!.filename]);
 handleSchemeArgs(process.argv);
-loadSettings(); // Cannot await on top-level, so if config is missing, default settings are loaded later
+settings.loadOrFetch();
+settings.on("changed", () => {
+	for (let admin of selectAdminContexts()) {
+		admin.send("settings-changed");
+	}
+	updateTray();
+});
 remoteMain.initialize();
 
 app.on("before-quit", e => {
 	rsInstances.forEach(c => c.close());
 	stopRsInstanceTracking();
-	saveSettings();
+	settings.save();
 });
 app.on("second-instance", (e, argv, cwd) => handleSchemeArgs(argv));
 app.on("window-all-closed", e => e.preventDefault());
@@ -97,6 +101,7 @@ export class ManagedWindow {
 				pinning: ["top", "left"]
 			};
 			app.lastRect = posrect;
+			settings.appconfig.emit("changed");
 		}
 
 		this.window = new BrowserWindow({
@@ -122,6 +127,7 @@ export class ManagedWindow {
 		this.windowPin.once("close", () => {
 			this.window.close();
 			app.wasOpen = true;
+			settings.appconfig.emit("changed");
 		});
 		this.windowPin.setPinRect(posrect);
 
@@ -142,7 +148,7 @@ export class ManagedWindow {
 	}
 }
 
-export function updateTray() {
+function updateTray() {
 	let menu: MenuItemConstructorOptions[] = [];
 	for (let app of settings.bookmarks) {
 		menu.push({
@@ -208,6 +214,13 @@ export function* selectAppContexts(rsinstance: RsInstance | null, permission: Ap
 		if (permission && !wnd.appConfig.permissions.includes(permission)) { continue; }
 		if (wnd.appFrameId == -1) { continue; }
 		let webcontent = electron.webContents.fromId(wnd.appFrameId);
+		yield webcontent;
+	}
+}
+
+export function* selectAdminContexts() {
+	for (let admin of admins) {
+		let webcontent = electron.webContents.fromId(admin);
 		yield webcontent;
 	}
 }

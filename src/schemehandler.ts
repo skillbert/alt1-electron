@@ -2,7 +2,7 @@ import { dialog, Menu, MenuItem, Tray } from "electron/main";
 import { openApp } from "./main";
 import fetch from "node-fetch";
 import { readJsonWithBOM, schemestring, UserError } from "./lib";
-import { AppConfigImport, installApp } from "./appconfig";
+import { AppConfigImport } from "./appconfig";
 import { settings } from "./settings";
 
 function takeString(str: string, part: string) {
@@ -31,7 +31,7 @@ export async function handleSchemeCommand(url: string) {
 			case "addapp":
 				let cnfurl = new URL(url);
 				let res: AppConfigImport = await fetch(cnfurl.href).then(r => readJsonWithBOM(r));
-				installApp(cnfurl, res);
+				await settings.appconfig.installApp(cnfurl, res);
 				break
 			case "openapp":
 				let app = settings.bookmarks.find(a => a.configUrl == url);
