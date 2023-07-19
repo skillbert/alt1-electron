@@ -45,6 +45,12 @@ npm run ui
 # emerge --ask --noreplace dev-util/pkgconf x11-libs/libxcb x11-libs/xcb-util-wm sys-process/procps
 ```
 
+### Fedora (38, possibly others with DNF)
+
+```console
+# dnf install libxcb xcb-util-wm-devel pkg-config procps-ng-devel
+```
+
 # Why rewrite?
 
 ### Clean slate
