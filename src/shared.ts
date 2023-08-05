@@ -17,10 +17,11 @@ type DrawBase = {};
 
 type DrawLine = DrawBase & { type: "line", color: number, linewidth: number, x1: number, y1: number, x2: number, y2: number };
 type DrawRect = DrawBase & { type: "rect", color: number, linewidth: number, x: number, y: number, width: number, height: number };
+type DrawRectFill = DrawBase & { type: "rectfill", color: number, fillColor: number, linewidth: number, x: number, y: number, width: number, height: number };
 type DrawText = DrawBase & { type: "text", color: number, size: number, text: string, font: string, shadow: boolean, center: boolean, x: number, y: number };
 type DrawSprite = DrawBase & { type: "sprite", x: number, y: number, sprite: FlatImageData };
 
-export type OverlayPrimitive = DrawLine | DrawRect | DrawText | DrawSprite;
+export type OverlayPrimitive = DrawLine | DrawRect | DrawRectFill | DrawText | DrawSprite;
 
 type CommandBase = {}
 type CommandDraw = CommandBase & { command: "draw", time: number, action: OverlayPrimitive };

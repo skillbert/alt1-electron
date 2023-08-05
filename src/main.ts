@@ -40,7 +40,7 @@ process.chdir(__dirname);
 if (!app.requestSingleInstanceLock()) { app.exit(); }
 app.setAsDefaultProtocolClient(schemestring, undefined, [__non_webpack_require__.main!.filename]);
 handleSchemeArgs(process.argv);
-loadSettings();
+loadSettings(); // Cannot await on top-level, so if config is missing, default settings are loaded later
 remoteMain.initialize();
 
 app.on("before-quit", e => {
@@ -110,11 +110,9 @@ export class ManagedWindow {
 		this.window = new BrowserWindow({
 			webPreferences: { nodeIntegration: true, webviewTag: true, contextIsolation: false },
 			frame: false,
-			enableLargerThanScreen: true,
 			width: posrect.width,
 			height: posrect.height,
 			transparent: true,
-			hasShadow: false,
 			fullscreenable: false,
 			resizable: false,//prevent electron from adding resize handlers that cover the dom around the border
 			skipTaskbar: true,
@@ -123,8 +121,8 @@ export class ManagedWindow {
 			show: false,
 		});
 		remoteMain.enable(this.window.webContents);
-		this.window.setVisibleOnAllWorkspaces(true, {visibleOnFullScreen: true, skipTransformProcessType: true});
-		// this.window.setAlwaysOnTop(true, "screen-saver");
+		this.window.setVisibleOnAllWorkspaces(true, {visibleOnFullScreen: true});
+
 		this.nativeWindow = new OSWindow(this.window.getNativeWindowHandle());
 		this.rsClient = rsclient;
 		this.appConfig = app;
@@ -139,6 +137,7 @@ export class ManagedWindow {
 		this.window.loadFile(path.resolve(__dirname, "appframe/index.html"));
 		this.window.once("close", () => {
 			managedWindows.splice(managedWindows.indexOf(this), 1);
+			this.rsClient.overlayWindow?.browser.webContents.send("clearoverlay", this.appFrameId);
 			this.windowPin.unpin();
 			fixTooltip();
 		});
@@ -153,14 +152,7 @@ export class ManagedWindow {
 	}
 }
 
-function drawTray() {
-	if (process.platform === "darwin") {
-		tray = new Tray(alt1icon.resize({ width: 16, height: 16 }));
-	} else {
-		tray = new Tray(alt1icon);
-	}
-	tray.on("click", e => tray!.popUpContextMenu());
-	tray.setToolTip("Alt1 Lite");
+export function updateTray() {
 	let menu: MenuItemConstructorOptions[] = [];
 	for (let app of settings.bookmarks) {
 		menu.push({
@@ -188,7 +180,16 @@ function drawTray() {
 	menu.push({ label: "Settings", click: showSettings });
 	menu.push({ label: "Exit", click: e => app.quit() });
 	let menuinst = Menu.buildFromTemplate(menu);
-	tray.setContextMenu(menuinst);
+	tray?.setContextMenu(menuinst);
+}
+
+function drawTray() {
+	if (!tray) {
+		tray = new Tray(alt1icon);
+		tray.on("click", e => tray!.popUpContextMenu());
+	}
+	tray.setToolTip("Alt1 Lite");
+	updateTray();
 }
 
 let settingsWnd: BrowserWindow | null = null;

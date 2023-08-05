@@ -10,9 +10,9 @@ import classnames from "classnames";
 import "./style.scss";
 import "./index.html";
 (window as any).remote = remote;
-var appview: Electron.WebviewTag | null = null;
-var appcontents: WebContents | null = null;
-var mainmodule = remote.getGlobal("Alt1lite") as typeof import("../main");
+let appview: Electron.WebviewTag | undefined = undefined;
+let appcontents: WebContents | undefined = undefined;
+let mainmodule = remote.getGlobal("Alt1lite") as typeof import("../main");
 //TODO backup if this fails
 var thiswindow = mainmodule.getManagedWindow(remote.getCurrentWebContents())!;
 
@@ -53,7 +53,7 @@ function AppFrame(p: {}) {
 		// 	if (devwnd && selfwnd) { devwnd.setParentWindow(selfwnd); }
 		// });
 		(window as any).view = view;
-		return () => { appview = null };
+		return () => { appview = undefined };
 	}, []);
 
 	//rightclick even listener
@@ -81,9 +81,9 @@ function AppFrame(p: {}) {
 				<BorderEl ver="bot" hor="right" />
 			</div>
 			<div className="buttonroot" ref={buttonroot}>
-				<div className="button" onClick={e => close()} />
-				<div className="button" onClick={e => setMinimized(!minimized)} />
-				<div className="button" onMouseDown={toggleDevTools} />
+				<div className="button button-close" onClick={e => close()} />
+				<div className={`button ${minimized ? "button-restore" : "button-minimize"}`} onClick={e => setMinimized(!minimized)} />
+				<div className="button button-settings" onMouseDown={toggleDevTools} />
 				<div className="dragbutton" onMouseDown={e => startDrag(e, true, true, true, true)} />
 			</div>
 		</div>

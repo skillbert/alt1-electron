@@ -1,4 +1,4 @@
-import { } from "./main";
+import { updateTray } from "./main";
 import { readJsonWithBOM, sameDomainResolve, UserError } from "./lib";
 import fetch from "node-fetch";
 import { Bookmark, settings } from "./settings";
@@ -58,8 +58,8 @@ export function installApp(url: URL, res: AppConfigImport) {
 		lastRect: null,
 		wasOpen: false
 	};
-	updateAppconfig(config, res);
 	settings.bookmarks.push(config);
+	updateAppconfig(config, res);
 	return config;
 }
 function updateAppconfig(prev: Bookmark, config: AppConfigImport) {
@@ -78,6 +78,7 @@ function updateAppconfig(prev: Bookmark, config: AppConfigImport) {
 	prev.defaultWidth = config.defaultWidth;
 	prev.defaultHeight = config.defaultHeight;
 	tryUpdateIcon(prev);
+	updateTray();
 }
 
 export async function identifyApp(url: URL) {
