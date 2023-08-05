@@ -112,6 +112,7 @@ export class ManagedWindow {
 			show: false,
 		});
 		remoteMain.enable(this.window.webContents);
+		this.window.setVisibleOnAllWorkspaces(true, {visibleOnFullScreen: true});
 
 		this.nativeWindow = new OSWindow(this.window.getNativeWindowHandle());
 		this.rsClient = rsclient;
@@ -127,6 +128,7 @@ export class ManagedWindow {
 		this.window.loadFile(path.resolve(__dirname, "appframe/index.html"));
 		this.window.once("close", () => {
 			managedWindows.splice(managedWindows.indexOf(this), 1);
+			this.rsClient.overlayWindow?.browser.webContents.send("clearoverlay", this.appFrameId);
 			this.windowPin.unpin();
 			fixTooltip();
 		});

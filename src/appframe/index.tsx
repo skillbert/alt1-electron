@@ -10,9 +10,9 @@ import classnames from "classnames";
 import "./style.scss";
 import "./index.html";
 (window as any).remote = remote;
-var appview: Electron.WebviewTag | null = null;
-var appcontents: WebContents | null = null;
-var mainmodule = remote.getGlobal("Alt1lite") as typeof import("../main");
+let appview: Electron.WebviewTag | undefined = undefined;
+let appcontents: WebContents | undefined = undefined;
+let mainmodule = remote.getGlobal("Alt1lite") as typeof import("../main");
 //TODO backup if this fails
 var thiswindow = mainmodule.getManagedWindow(remote.getCurrentWebContents())!;
 
@@ -53,7 +53,7 @@ function AppFrame(p: {}) {
 		// 	if (devwnd && selfwnd) { devwnd.setParentWindow(selfwnd); }
 		// });
 		(window as any).view = view;
-		return () => { appview = null };
+		return () => { appview = undefined };
 	}, []);
 
 	//rightclick even listener

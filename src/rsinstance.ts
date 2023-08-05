@@ -108,10 +108,19 @@ class ActiveRightclick {
 		}
 	}
 }
-
+export class StalledOverlay {
+	frameid: number;
+	cmd: OverlayCommand[];
+}
+export class OverlayWindow {
+	browser: BrowserWindow;
+	pin: OSWindowPin | null;
+	stalledOverlay: StalledOverlay[];
+}
 export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 	window: OSWindow;
-	overlayWindow: { browser: BrowserWindow, pin: OSWindowPin | null, stalledOverlay: { frameid: number, cmd: OverlayCommand[] }[] } | null;
+	// overlayWindow: { browser: BrowserWindow, pin: OSWindowPin | null, stalledOverlay: { frameid: number, cmd: OverlayCommand[] }[] } | null;
+	overlayWindow: OverlayWindow | null;
 	activeRightclick: ActiveRightclick | null = null;
 	isActive = false;
 	lastActiveTime = 0;
@@ -145,7 +154,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 
 	emitAppEvent<T extends keyof Alt1EventType>(permission: AppPermission | "", type: T, event: Alt1EventType[T]) {
 		for (let context of selectAppContexts(this, permission)) {
-			context.send("appevent", type, event);
+			context?.send("appevent", type, event);
 		}
 	}
 
@@ -247,7 +256,9 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 			mouseRs: mousepos
 		});
 	}
-
+	clearOverlay(frameid: number) {
+		this.overlayWindow?.browser.webContents.send("closeframe", frameid);
+	}
 	overlayCommands(frameid: number, commands: OverlayCommand[]) {
 		if (!this.overlayWindow) {
 			console.log("opening overlay");
@@ -268,22 +279,36 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 			});
 
 			let pin: OSWindowPin = new OSWindowPin(browser, this.window, "cover");
-			browser.loadFile(path.resolve(__dirname, "overlayframe/index.html"));
-			browser.on("closed", e => {
-				pin.unpin();
-				this.overlayWindow = null;
-				console.log("overlay closed");
+			browser.loadFile(path.resolve(__dirname, "overlayframe/index.html")).then(() => {
+				console.log(`uh. loadFile fulfilled?`);
 			});
 			browser.once("ready-to-show", () => {
 				browser.show();
 			});
 			browser.webContents.once("dom-ready", e => {
+				console.log("browser called 'dom-ready'");
 				for (let stalled of this.overlayWindow!.stalledOverlay) {
 					browser.webContents.send("overlay", stalled.frameid, stalled.cmd);
 				}
 			});
+			browser.on("closed", e => {
+				pin.unpin();
+				this.overlayWindow = null;
+				console.log("overlay closed");
+			});
 			browser.setIgnoreMouseEvents(true);
-			this.overlayWindow = { browser, pin, stalledOverlay: [{ frameid: frameid, cmd: commands }] };
+			// this.overlayWindow = { browser, pin, stalledOverlay: [{ frameid: frameid, cmd: commands }] };
+			this.overlayWindow = new OverlayWindow();
+			this.overlayWindow.browser = browser;
+			this.overlayWindow.pin = pin;
+			this.overlayWindow.stalledOverlay = [
+				new StalledOverlay()
+			];
+			this.overlayWindow.stalledOverlay[0].frameid = frameid;
+			this.overlayWindow.stalledOverlay[0].cmd = commands;
+			for (let mw in managedWindows) {
+				console.log(`mw: ${managedWindows[mw].appFrameId} vs ${managedWindows[mw].window.webContents.id}`)
+			}
 		} else {
 			this.overlayWindow.browser.webContents.send("overlay", frameid, commands);
 		}

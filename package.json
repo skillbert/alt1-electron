@@ -15,8 +15,9 @@
 	"author": "",
 	"license": "GPL-3.0",
 	"devDependencies": {
-		"@alt1/base": "^1.0.0-alpha.2",
-		"@alt1/font-loader": "^1.0.0-alpha.2",
+		"@alt1/base": "../alt1/alt1/base",
+		"@alt1/chatbox": "../alt1/alt1/chatbox",
+		"@alt1/font-loader": "^0.0.17",
 		"@alt1/imagedata-loader": "^1.0.0-alpha.2",
 		"@alt1/ocr": "^1.0.0-alpha.6",
 		"@alt1/webpack": "^1.0.0-alpha.5",
@@ -48,7 +49,8 @@
 	},
 	"dependencies": {
 		"@electron/remote": "^2.0.8",
-		"electron": "^18.2.0",
+		"electron": "^25.3.2",
+		"node-abi": "^3.45.0",
 		"node-fetch": "^2.6.1",
 		"react": "^17.0.1",
 		"react-dom": "^17.0.1"

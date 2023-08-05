@@ -236,6 +236,11 @@ export function initIpcApi(ipcMain: IpcMain) {
 		fixTooltip();
 	}));
 
+	ipcMain.on('clearoverlay', syncwrap((e) => {
+		let wnd = expectAppWindow(e);
+		wnd.rsClient.clearOverlay(wnd.appFrameId);
+	}));
+
 	ipcMain.on("overlay", syncwrap((e, commands: OverlayCommand[]) => {
 		//TODO errors here are not rethrown in app, just swallow and log them
 		let wnd = expectAppWindow(e);
