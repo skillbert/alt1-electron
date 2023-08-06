@@ -2,6 +2,7 @@
 import type * as alt1types from "@alt1/base";
 import { ipcRenderer } from "electron";
 import { FlatImageData, SyncResponse, OverlayCommand, RsClientState } from "../shared";
+import {decodeImageString} from "@alt1/base";
 
 let warningsTriggered: string[] = [];
 function warn(key: string, message: string) {
@@ -133,6 +134,10 @@ var alt1api: Partial<typeof alt1> = {
 		queueOverlayCommand({ command: "draw", time, action: { type: "rect", x, y, width, height, color, linewidth } });
 		return true;
 	},
+	overLayRectFill(color, fillColor, x, y, width, height, time, linewidth) {
+		queueOverlayCommand({ command: "draw", time, action: { type: "rectfill", x, y, width, height, color, fillColor, linewidth } });
+		return true;
+	},
 	overLayTextEx(text, color, size, x, y, time, font, center, shadow) {
 		queueOverlayCommand({ command: "draw", time, action: { type: "text", x, y, font, text, center, shadow, color, size } });
 		return true;
@@ -141,8 +146,11 @@ var alt1api: Partial<typeof alt1> = {
 		return alt1.overLayTextEx(text, color, size, x, y, time, "", false, true);
 	},
 	overLayImage(x, y, imgstr, imgwidth, time) {
-		warn("overlayimg", "alt1.overLayImage is not implemented");
-		return false;
+		let imgheight = imgstr.length / (4 * imgwidth);
+		let id = new ImageData(imgwidth, imgheight);
+		let img = decodeImageString(imgstr, id, 0, 0, imgwidth, imgheight);
+		queueOverlayCommand({ command: "draw", time, action: { type: "sprite", x, y, sprite: {data:img.data, width:imgwidth, height:img.height}} })
+		return true
 	},
 	overLaySetGroup(groupid: string) { queueOverlayCommand({ command: "setgroup", groupid }); },
 	overLaySetGroupZIndex(groupid: string, zindex: number) { queueOverlayCommand({ command: "setgroupzindex", groupid, zindex }); },
@@ -171,6 +179,7 @@ var alt1api: Partial<typeof alt1> = {
 	},
 	closeApp() {
 		//TODO check if this actually works
+		console.log("Close (alt1api.ts)");
 		window.close();
 	},
 	userResize(left, top, right, bot) {

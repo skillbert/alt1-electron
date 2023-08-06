@@ -1,5 +1,5 @@
-import { ipcRenderer } from "electron/renderer";
-import type { OverlayCommand, OverlayPrimitive } from "src/shared";
+import {ipcRenderer} from "electron/renderer";
+import type {OverlayCommand, OverlayPrimitive} from "src/shared";
 
 import "./index.html";
 
@@ -39,9 +39,14 @@ ipcRenderer.on("overlay", (e, frameid: number, commands) => {
 });
 
 ipcRenderer.on("closeframe", (e, frameid: number) => {
+	console.log(`Closeframe closing groupstates for ${frameid}`);
 	framestates.delete(frameid);
 	groupstates = groupstates.filter(q => q.frameid == frameid);
 	redraw(Date.now());
+});
+
+ipcRenderer.on("clearoverlay", (e) => {
+	window.close();
 });
 
 function parseCommands(frameid: number, commands: OverlayCommand[]) {
@@ -147,26 +152,37 @@ function redraw(now: number, force = false) {
 					ctx.strokeStyle = coltocss(act.color);
 					ctx.lineWidth = act.linewidth;
 					ctx.strokeRect(act.x + act.linewidth / 2, act.y + act.linewidth / 2, act.width - act.linewidth, act.height - act.linewidth);
+				} else if (act.type == "rectfill") {
+					ctx.fillStyle = `rgba(${(act.fillColor >> 16) & 0xff},${(act.fillColor >> 8) & 0xff},${(act.fillColor >> 0) & 0xff},${((act.fillColor >> 24) & 0xff) / 255})`;
+					ctx.lineWidth = act.linewidth;
+					ctx.fillRect(act.x + act.linewidth / 2, act.y + act.linewidth / 2, act.width - act.linewidth, act.height - act.linewidth);
 				} else if (act.type == "text") {
+					if(act.shadow) {
+						ctx.shadowColor = "rgba(0,0,0, 1)";
+						ctx.shadowBlur = 8;
+						ctx.shadowOffsetX = 2;
+						ctx.shadowOffsetY = 2;
+					}
 					ctx.fillStyle = coltocss(act.color);
-					ctx.font = `${act.size}pt ${act.font || "sans-serif"}`;
+					ctx.font = `normal 900 ${act.size}px ${act.font || "sans-serif"}`;
 					ctx.textAlign = act.center ? "center" : "start";
-					ctx.textBaseline = act.center ? "middle" : "top";
+					// ctx.textBaseline = act.center ? "middle" : "top";
 					ctx.fillText(act.text, act.x, act.y);
 				} else if (act.type == "sprite") {
-					//TODO
+					let imgData = new ImageData(act.sprite.data, act.sprite.width, act.sprite.height);
+					ctx.putImageData(imgData, act.x, act.y, 0, 0, act.sprite.width, act.sprite.height - 10);
 				}
 			}
 		}
 	}
 
-	if (drawcount == 0 && !shutdowntimer) {
-		shutdowntimer = setTimeout(e => window.close(), shutdowntimeout) as any;
-	}
-	if (drawcount != 0 && shutdowntimer) {
-		clearTimeout(shutdowntimer);
-		shutdowntimer = 0;
-	}
+	// if (drawcount == 0 && !shutdowntimer) {
+	// 	shutdowntimer = setTimeout(e => window.close(), shutdowntimeout) as any;
+	// }
+	// if (drawcount != 0 && shutdowntimer) {
+	// 	clearTimeout(shutdowntimer);
+	// 	shutdowntimer = 0;
+	// }
 
 	scheduleRedraw(newnextupdate);
 }

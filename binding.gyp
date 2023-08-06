@@ -20,7 +20,8 @@
 			"xcode_settings": {
 				"GCC_ENABLE_CPP_EXCEPTIONS": "YES",
 				"CLANG_CXX_LIBRARY": "libc++",
-				"MACOSX_DEPLOYMENT_TARGET": "10.7"
+				"MACOSX_DEPLOYMENT_TARGET": "10.15",
+        "BUILD_DIR":"build",
 			},
 			"msvs_settings": {
 				"VCCLCompilerTool": { "ExceptionHandling": 1 },
@@ -86,13 +87,19 @@
 					],
 					"cflags_cc": [ "-std=c++17" ],
 				}],
-				['OS=="mac"', {
+				['OS == "mac"', {
 					"defines": [
 						'OS_MAC',
 					],
 					"sources": [
-						"./native/os_mac.mm"
-					]
+						"./native/os_mac.mm",
+						"./native/os_mac.h",
+						"./native/mac/AONSWindowDelegate.mm",
+						"./native/mac/AONSWindowDelegate.h",
+						"./native/mac/AOUtil.h",
+						"./native/mac/AOUtil.mm",
+					],
+					"cflags_cc": [ "-std=c++17" ],
 				}],
 			]
 		}
