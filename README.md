@@ -30,7 +30,7 @@ npm run ui
 ### Arch (pacman)
 
 ```console
-# pacman -S pkg-config libxcb xcb-util-wm procps-ng
+# pacman -S pkg-config libxcb xcb-util-wm procps-ng libprocps
 ```
 
 ### Debian/Ubuntu (apt)
