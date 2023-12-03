@@ -33,7 +33,18 @@ npm run ui
 # pacman -S pkg-config libxcb xcb-util-wm procps-ng
 ```
 
-### Debian/Ubuntu (apt)
+### Ubuntu 23.04
+At the time of writing libprocps-dev is not available via apt so you must install it manually.
+
+```console
+# sudo apt install pkg-config libxcb1-dev libxcb-shm0-dev libxcb-composite0-dev libxcb-ewmh-dev libxcb-record0-dev libxcb-shape0-dev && \
+# curl -O http://mirrors.edge.kernel.org/ubuntu/pool/main/p/procps/libprocps-dev_3.3.17-6ubuntu2_amd64.deb && \
+# curl -O http://mirrors.edge.kernel.org/ubuntu/pool/main/p/procps/libprocps8_3.3.17-6ubuntu2_amd64.deb && \
+# sudo dpkg -i libprocps-dev_3.3.17-6ubuntu2_amd64.deb libprocps8_3.3.17-6ubuntu2_amd64.deb && \
+# rm libprocps-dev_3.3.17-6ubuntu2_amd64.deb libprocps8_3.3.17-6ubuntu2_amd64.deb
+```
+
+### Debian / Other Ubuntu (apt)
 
 ```console
 # apt install pkg-config libxcb-dev libxcb-shm-dev libxcb-composite-dev libxcb-ewmh-dev libxcb-record-dev libxcb-shape-dev libprocps-dev
