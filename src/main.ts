@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, WebContents } from "electron";
+import { app, BrowserWindow, BrowserView, globalShortcut, ipcMain, WebContents } from "electron";
 import * as electron from "electron";
 import * as path from "path";
 import { Menu, Tray } from "electron/main";
@@ -166,6 +166,7 @@ export function updateTray() {
 		menu.push({ label: "Hook dev tools", type: "checkbox", checked: alwaysOpenDevtools, click: e => alwaysOpenDevtools = !alwaysOpenDevtools });
 	}
 	menu.push({ type: "separator" });
+    menu.push({ label: "Internal Browser", click: openInternalBrowser });
 	menu.push({ label: "Settings", click: showSettings });
 	menu.push({ label: "Exit", click: e => app.quit() });
 	let menuinst = Menu.buildFromTemplate(menu);
@@ -188,11 +189,46 @@ export function showSettings() {
 		return;
 	}
 	settingsWnd = new BrowserWindow({
-		webPreferences: { nodeIntegration: true, webviewTag: true, contextIsolation: false },
+		webPreferences: { nodeIntegration: true, webviewTag: true, contextIsolation: false, },
 	});
 	settingsWnd.loadFile(path.resolve(__dirname, "settings/index.html"));
 	settingsWnd.once("closed", e => settingsWnd = null);
 	remoteMain.enable(settingsWnd.webContents);
+}
+
+//Browser WIP, currently just exposes api to inject 3rd party apps
+let internalBrowserWindow: BrowserWindow | null = null;
+export function openInternalBrowser() {
+    if (internalBrowserWindow) {
+        internalBrowserWindow.focus();
+        return;
+    }
+
+    internalBrowserWindow = new BrowserWindow({
+        width: 1200,
+        height: 800,
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path.join(__dirname, "preload.js") // Preload script for IPC handling
+        }
+    });
+
+    // Load a default page (or blank)
+    internalBrowserWindow.loadURL("https://example.com");
+
+    // Set up communication between UI and the main process
+    ipcMain.on("navigate-url", (event, url) => {
+        if (internalBrowserWindow) {
+            internalBrowserWindow.loadURL(url);
+        }
+    });
+
+    internalBrowserWindow.on("closed", () => {
+        internalBrowserWindow = null;
+    });
+
+    internalBrowserWindow.webContents.openDevTools(); // For debugging
 }
 
 //TODO add permission
