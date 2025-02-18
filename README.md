@@ -2,6 +2,17 @@
 # Alt1 Electron (name pending)
 This project is an experimental rewrite of the Alt1 Toolkit in Typescript, Electron and React. The project is currently in an experimental state, it is not clear yet if this could become a replacement for C# Alt1.
 
+# This fork easily enables usage of 3rd party apps
+To install 3rd party apps, first download and build this fork.\
+An "Internal Browser" option will appear in the menu.\
+Upon opening, the dev tools will appear.\
+
+The syntax to add an app is currently:\
+`electronAPI.addThirdPartyPlugin("https://example.com/appconfig.json")`\
+You can find the URL in the normal links to add apps to Alt1, just remove the\
+`alt1://addapp/`\
+In the future, once a working browser is implemented, installing apps should work the same way as Windows.
+
 # Build
 You need a working nodejs installation including nodejs native build tools (is an option during installation) in order to compile Alt1.
 ```sh
@@ -14,7 +25,7 @@ npm i
 npm run native
 
 # auto-build typescript/webpack
-npm run watch
+npm run build
 
 # Run
 npm run ui
