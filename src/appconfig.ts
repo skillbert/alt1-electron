@@ -1,3 +1,4 @@
+import { ipcMain } from "electron";
 import { updateTray } from "./main";
 import { readJsonWithBOM, sameDomainResolve, UserError } from "./lib";
 import fetch from "node-fetch";
@@ -100,3 +101,21 @@ export async function identifyApp(url: URL) {
 		return prev;
 	}
 }
+
+ipcMain.on("add-third-party-plugin", async (_event, url) => {
+    try {
+        const pluginURL = new URL(url);
+        let res: unknown = await fetch(pluginURL.href).then(r => readJsonWithBOM(r));
+        let config = checkAppConfigImport.load(res, { defaultOnError: true });
+
+        let prev = settings.bookmarks.find(q => q.configUrl == pluginURL.href);
+        if (!prev) {
+            console.log("Installing new plugin:", pluginURL.href);
+            installApp(pluginURL, config);
+        } else {
+            console.log("Plugin already installed, skipping:", pluginURL.href);
+        }
+    } catch (e) {
+        console.log("Failed to install plugin:", url, e);
+    }
+});
