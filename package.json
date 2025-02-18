@@ -4,6 +4,7 @@
 	"description": "Lightweight cross-platform client for Alt1 Toolkit apps",
 	"main": "index.ts",
 	"scripts": {
+		"prebuild": "npx tsc src/preload.ts --outDir dist",
 		"build": "node -r ts-node/register ./node_modules/webpack/bin/webpack.js",
 		"release": "npm run build -- -p",
 		"watch": "npm run build -- --watch",
