@@ -5,6 +5,7 @@ import * as React from "react";
 import * as ReactDom from "react-dom";
 import "../appframe/alt1api";
 import * as a1lib from "alt1";
+import { runCaptureDiagnostic } from "../readers/capturediagnostic";
 import "./style.scss";
 import "./index.html";
 
@@ -106,7 +107,7 @@ function CaptureSettings(props: { settings: Settings }) {
 }
 
 function CapturePreview(p: { mode: CaptureMode }) {
-	let [diag, setdiag] = React.useState("");
+	let [diag, setdiagnostic] = React.useState<ReturnType<typeof runCaptureDiagnostic> | null>(null);
 
 	let reffnc = React.useMemo(() => {
 		let interval = 0;
@@ -119,8 +120,9 @@ function CapturePreview(p: { mode: CaptureMode }) {
 					cnv.width = img.width;
 					cnv.height = img.height;
 					ctx.putImageData(img, 0, 0);
+					setdiagnostic(runCaptureDiagnostic(new a1lib.ImgRefData(img)));
 				}
-				interval = +setInterval(render, 1000);
+				interval = +setInterval(render, 100);
 				render();
 			}
 		}
@@ -129,7 +131,9 @@ function CapturePreview(p: { mode: CaptureMode }) {
 	return (
 		<React.Fragment>
 			<canvas ref={reffnc} style={{ maxWidth: "500px", maxHeight: "500px" }} />
-			<div>{diag}</div>
+			{diag && <div>{
+				diag.homeportfound ? "Home teleport button found, capture seems to be working correctly!" : "Alt1 failed to find the home teleport button."
+			}</div>}
 		</React.Fragment>
 	)
 }
