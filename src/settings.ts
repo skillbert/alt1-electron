@@ -96,6 +96,16 @@ class ManagedSettings extends TypedEmitter<SettingsEvents> {
 		return this.settings.captureMode;
 	}
 
+
+	set captureMode(mode: CaptureMode) { 
+		if (!Object.keys(checkSettings.props.captureMode.opts).includes(mode)) { 
+			console.log("unknown capture mode", mode);
+			return;
+		}
+		this.settings.captureMode = mode;
+		this.emit("changed");
+	}
+
 	/**
 	 * Emit the "changed" event on AppConfig if the contents of this array are modified.
 	 */

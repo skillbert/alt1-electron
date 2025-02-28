@@ -5,6 +5,7 @@ import { admins, fixTooltip, getManagedAppWindow, ManagedWindow, openApp } from 
 import { native } from "./native";
 import { settings } from "./settings";
 import { FlatImageData, OverlayCommand, Rectangle, RsClientState } from "./shared";
+import { rsInstances } from "./rsinstance";
 
 const snapdistance = 10;
 const snapcornerlength = 30;
@@ -15,6 +16,17 @@ function expectAppWindow(e: IpcMainEvent | IpcMainInvokeEvent) {
 	if (!wnd) { throw new Error("App context not found"); }
 	//TODO check if e.senderFrame.url is same origin as appconfig
 	return wnd;
+}
+
+function expectPermittedRsClient(e: IpcMainEvent | IpcMainInvokeEvent) {
+	let wnd = getManagedAppWindow(e.sender.id);
+	if (wnd) { return wnd.rsClient; }
+	if (admins.has(e.sender.id)) {
+		let instance = rsInstances[0];
+		if (!instance) { throw new Error("no rs clients bound"); }
+		return instance;
+	}
+	throw new Error("Browser context has no permitted RS Client");
 }
 
 function isAdmin(e: IpcMainEvent | IpcMainInvokeEvent) {
@@ -201,8 +213,8 @@ export function initIpcApi(ipcMain: IpcMain) {
 
 	ipcMain.on("capturesync", (e, x, y, width, height) => {
 		try {
-			let wnd = expectAppWindow(e);
-			let capt = native.captureWindowMulti(wnd.rsClient.window.handle, settings.captureMode, { main: { x, y, width, height } });
+			let client = expectPermittedRsClient(e);
+			let capt = native.captureWindowMulti(client.window.handle, settings.captureMode, { main: { x, y, width, height } });
 			e.returnValue = { value: { width, height, data: capt.main } };
 		} catch (err) {
 			e.returnValue = { error: "" + err };
@@ -210,11 +222,11 @@ export function initIpcApi(ipcMain: IpcMain) {
 	});
 
 	ipcMain.on("rsbounds", syncwrap((e) => {
-		let wnd = expectAppWindow(e);
+		let client = expectPermittedRsClient(e);
 		let state: RsClientState = {
-			active: wnd.rsClient.isActive,
-			clientRect: wnd.rsClient.window.getClientBounds(),
-			lastActiveTime: wnd.rsClient.lastActiveTime,
+			active: client.isActive,
+			clientRect: client.window.getClientBounds(),
+			lastActiveTime: client.lastActiveTime,
 			ping: 10,//TODO
 			scaling: 1,//TODO
 			captureMode: settings.captureMode
@@ -223,13 +235,13 @@ export function initIpcApi(ipcMain: IpcMain) {
 	}));
 
 	ipcMain.handle("capture", (e, x, y, width, height) => {
-		let wnd = expectAppWindow(e);
-		return native.captureWindowMulti(wnd.rsClient.window.handle, settings.captureMode, { main: { x, y, width, height } }).main;
+		let client = expectPermittedRsClient(e);
+		return native.captureWindowMulti(client.window.handle, settings.captureMode, { main: { x, y, width, height } }).main;
 	});
 
 	ipcMain.handle("capturemulti", (e, rects: { [key: string]: Rectangle }) => {
-		let wnd = expectAppWindow(e);
-		return native.captureWindowMulti(wnd.rsClient.window.handle, settings.captureMode, rects);
+		let client = expectPermittedRsClient(e);
+		return native.captureWindowMulti(client.window.handle, settings.captureMode, rects);
 	});
 
 	ipcMain.on("settooltip", syncwrap((e, text: string) => {
@@ -279,6 +291,12 @@ export function initIpcApi(ipcMain: IpcMain) {
 	ipcMain.handle("getsettings", (e) => {
 		if (isAdmin(e)) {
 			return settings.settings;
+		}
+	});
+
+	ipcMain.handle("setcapturemode", (e, newmode) => {
+		if (isAdmin(e)) {
+			settings.captureMode = newmode;
 		}
 	})
 }
