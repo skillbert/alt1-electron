@@ -1,8 +1,7 @@
 import * as a1lib from "alt1";
 import { IpcMain, IpcMainEvent, IpcMainInvokeEvent, screen } from "electron/main"
-import { identifyApp } from "./appconfig";
 import { sameDomainResolve } from "./lib";
-import { fixTooltip, getManagedAppWindow, ManagedWindow } from "./main";
+import { admins, fixTooltip, getManagedAppWindow, ManagedWindow, openApp } from "./main";
 import { native } from "./native";
 import { settings } from "./settings";
 import { FlatImageData, OverlayCommand, Rectangle, RsClientState } from "./shared";
@@ -18,6 +17,9 @@ function expectAppWindow(e: IpcMainEvent | IpcMainInvokeEvent) {
 	return wnd;
 }
 
+function isAdmin(e: IpcMainEvent | IpcMainInvokeEvent) {
+	return admins.has(e.sender.id);
+}
 
 function detectCornerEdge(img: FlatImageData, rect: a1lib.Rect, hor: boolean, reverse: boolean, thresh: number) {
 	if (!hor) {
@@ -191,7 +193,7 @@ export function initIpcApi(ipcMain: IpcMain) {
 	ipcMain.on("identifyapp", async (e, configurl) => {
 		try {
 			let url = sameDomainResolve(e.sender.getURL(), configurl);
-			await identifyApp(url);
+			await settings.appconfig.identifyApp(url);
 		} catch (e) {
 			console.error(e);
 		}
@@ -250,4 +252,33 @@ export function initIpcApi(ipcMain: IpcMain) {
 	ipcMain.on("shape", syncwrap((e, wnd: BigInt, rects: Rectangle[]) => {
 		native.setWindowShape(wnd, rects);
 	}));
+
+	ipcMain.handle("openapp", async (e, url) => {
+		if (isAdmin(e)) {
+			let app = settings.bookmarks.find(a => a.configUrl == url);
+			if (app) {
+				openApp(app);
+			} else {
+				console.log(`Cannot find app in bookmarks ${url}`);
+			}
+		}
+	});
+
+	ipcMain.handle("removeapp", async (e, url) => {
+		if (isAdmin(e)) {
+			settings.appconfig.uninstallApp(url);
+		}
+	});
+
+	ipcMain.handle("installapp", async (e, url) => {
+		if (isAdmin(e)) {
+			await settings.appconfig.identifyApp(new URL(url));
+		}
+	});
+
+	ipcMain.handle("getsettings", (e) => {
+		if (isAdmin(e)) {
+			return settings.settings;
+		}
+	})
 }
