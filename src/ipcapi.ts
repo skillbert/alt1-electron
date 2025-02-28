@@ -1,4 +1,4 @@
-import * as a1lib from "@alt1/base/dist";
+import * as a1lib from "alt1";
 import { IpcMain, IpcMainEvent, IpcMainInvokeEvent, screen } from "electron/main"
 import { identifyApp } from "./appconfig";
 import { sameDomainResolve } from "./lib";

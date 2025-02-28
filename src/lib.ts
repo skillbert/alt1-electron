@@ -1,7 +1,7 @@
 import * as path from "path";
 import * as fs from "fs";
 import { shell } from "electron";
-import { ImageData } from "@alt1/base";
+import { ImageData } from "alt1";
 
 declare global {
 	//TODO webpack npm package should fix this

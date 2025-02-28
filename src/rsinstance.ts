@@ -8,7 +8,7 @@ import { TypedEmitter } from "./typedemitter";
 import { boundMethod } from "autobind-decorator";
 import { AppPermission, settings } from "./settings";
 import { openApp, managedWindows, selectAppContexts } from "./main";
-import { Alt1EventType, ImgRef, ImgRefData, PointLike, Rect, RectLike } from "@alt1/base";
+import { Alt1EventType, ImgRef, ImgRefData, PointLike, Rect, RectLike } from "alt1";
 import { readAnything } from "./readers/alt1reader";
 import RightClickReader from "./readers/rightclick";
 

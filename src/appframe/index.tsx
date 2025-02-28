@@ -4,7 +4,7 @@ import { useState, useLayoutEffect, useRef } from "react";
 import { render } from "react-dom";
 import { ipcRenderer, WebContents } from "electron";
 import * as remote from "@electron/remote";
-import type { RectLike } from "@alt1/base";
+import type { RectLike } from "alt1";
 import classnames from "classnames";
 
 import "./style.scss";

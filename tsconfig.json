@@ -1,7 +1,7 @@
 {
 	"compilerOptions": {
-		"moduleResolution": "node",
-		"module": "commonjs",
+		"moduleResolution": "bundler",
+		"module": "preserve",
 		"lib": [ "es6", "dom" ],
 		"target": "es6",
 		"sourceMap": true,

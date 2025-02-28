@@ -38,7 +38,10 @@ app.on("browser-window-created", (e, wnd) => {
 const originalCwd = process.cwd();
 process.chdir(__dirname);
 if (!app.requestSingleInstanceLock()) { app.exit(); }
-app.setAsDefaultProtocolClient(schemestring, undefined, [__non_webpack_require__.main!.filename]);
+app.getApplicationInfoForProtocol("alt1")
+	.then(info => console.log("current alt1 protocol handler:", info))
+	.catch(e => console.log("current alt1 protocol check failed ", e));
+app.setAsDefaultProtocolClient(schemestring, undefined, process.argv.filter(q => !q.startsWith("--inspect-brk")));
 handleSchemeArgs(process.argv);
 loadSettings(); // Cannot await on top-level, so if config is missing, default settings are loaded later
 remoteMain.initialize();
@@ -101,7 +104,13 @@ export class ManagedWindow {
 		}
 
 		this.window = new BrowserWindow({
-			webPreferences: { nodeIntegration: true, webviewTag: true, contextIsolation: false },
+			webPreferences: {
+				nodeIntegration: true,
+				webviewTag: true,
+				contextIsolation: false,
+				nodeIntegrationInSubFrames: false,
+				nodeIntegrationInWorker: false
+			},
 			frame: false,
 			width: posrect.width,
 			height: posrect.height,
@@ -114,6 +123,7 @@ export class ManagedWindow {
 			show: false,
 		});
 		remoteMain.enable(this.window.webContents);
+		this.window.webContents.openDevTools({ mode: "detach" });
 
 		this.nativeWindow = new OSWindow(this.window.getNativeWindowHandle());
 		this.rsClient = rsclient;

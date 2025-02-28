@@ -1,6 +1,6 @@
-import { ImageData, ImgRef, Rect, RectLike } from "@alt1/base";
-import { ImageDetect } from "@alt1/base";
-import * as OCR from "@alt1/ocr";
+import { ImageData, ImgRef, Rect, RectLike } from "alt1";
+import { ImageDetect } from "alt1";
+import * as OCR from "alt1/ocr";
 
 let rightclickfont = require("./imgs/rightclick.fontmeta.json");
 

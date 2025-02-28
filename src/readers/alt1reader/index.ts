@@ -1,13 +1,13 @@
-import { ImgRefData, Rect } from "@alt1/base";
-import * as OCR from "@alt1/ocr";
+import { ImgRefData, Rect } from "alt1";
+import * as OCR from "alt1/ocr";
 import RightClickReader from "../rightclick";
 
 const chatfonts: { name: TextResult["font"], font: OCR.FontDefinition }[] = [
-	{ name: "10pt", font: require("@alt1/ocr/fonts/chatbox/10pt.js") },
-	{ name: "12pt", font: require("@alt1/ocr/fonts/chatbox/12pt.js") },
-	{ name: "14pt", font: require("@alt1/ocr/fonts/chatbox/14pt.js") },
-	{ name: "16pt", font: require("@alt1/ocr/fonts/chatbox/16pt.js") },
-	{ name: "18pt", font: require("@alt1/ocr/fonts/chatbox/18pt.js") },
+	{ name: "10pt", font: require("alt1/fonts/chatbox/10pt.js") },
+	{ name: "12pt", font: require("alt1/fonts/chatbox/12pt.js") },
+	{ name: "14pt", font: require("alt1/fonts/chatbox/14pt.js") },
+	{ name: "16pt", font: require("alt1/fonts/chatbox/16pt.js") },
+	{ name: "18pt", font: require("alt1/fonts/chatbox/18pt.js") },
 ];
 
 type TextResult = {
@@ -22,7 +22,7 @@ type RightClickResult = {
 	menu: ReturnType<InstanceType<typeof RightClickReader>["read"]>
 }
 
-//copied from @alt1/chatbox
+//copied from alt1/chatbox
 export const defaultcolors: OCR.ColortTriplet[] = [
 	[0, 255, 0],
 	[0, 255, 255],

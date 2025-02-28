@@ -20,6 +20,8 @@ function addMain(env: Record<string, string | boolean>) {
 	if (!config.opts.production) {
 		config.chain.devtool("eval" as any);
 	}
+	config.addExternal("canvas", null);
+	config.addExternal("sharp", null);
 	return config.toConfig();
 }
 

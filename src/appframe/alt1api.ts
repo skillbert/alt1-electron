@@ -1,5 +1,5 @@
-//this import also imports global namespace alt1 passively...
-import type * as alt1types from "@alt1/base";
+//this import also imports global namespace alt1 passively
+import type * as alt1types from "alt1";
 import { ipcRenderer } from "electron";
 import { FlatImageData, SyncResponse, OverlayCommand, RsClientState } from "../shared";
 
