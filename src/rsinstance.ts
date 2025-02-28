@@ -269,7 +269,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 
 			let pin: OSWindowPin = new OSWindowPin(browser, this.window, "cover");
 			browser.loadFile(path.resolve(__dirname, "overlayframe/index.html"));
-			browser.on("closed", e => {
+			browser.on("closed", () => {
 				pin.unpin();
 				this.overlayWindow = null;
 				console.log("overlay closed");
@@ -277,7 +277,7 @@ export class RsInstance extends TypedEmitter<RsInstanceEvents>{
 			browser.once("ready-to-show", () => {
 				browser.show();
 			});
-			browser.webContents.once("dom-ready", e => {
+			browser.webContents.once("dom-ready", () => {
 				for (let stalled of this.overlayWindow!.stalledOverlay) {
 					browser.webContents.send("overlay", stalled.frameid, stalled.cmd);
 				}

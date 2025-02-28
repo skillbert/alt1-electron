@@ -39,10 +39,10 @@ function AppFrame(p: {}) {
 		//view.webpreferences = "sandbox,contextIsolation=true";
 		view.webpreferences = "sandbox,contextIsolation=false";
 		gridel.current!.appendChild(view);
-		view.addEventListener("dom-ready", e => {
+		view.addEventListener("dom-ready", () => {
 			//TODO is there a better way to get a ref to the frame?
 			thiswindow.appFrameId = view.getWebContentsId();
-			appcontents = remote.webContents.fromId(appview!.getWebContentsId());
+			appcontents = remote.webContents.fromId(appview!.getWebContentsId()) ?? null;
 		});
 
 		appview = view;

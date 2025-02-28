@@ -49,7 +49,9 @@ app.on("before-quit", e => {
 	saveSettings();
 });
 app.on("second-instance", (e, argv, cwd) => handleSchemeArgs(argv));
-app.on("window-all-closed", e => e.preventDefault());
+app.on("window-all-closed", () => {
+	// existance of this listener prevent electron default behavior of closing
+})
 app.once("ready", () => {
 	globalShortcut.register("Alt+1", alt1Pressed);
 	drawTray();
@@ -191,7 +193,7 @@ export function showSettings() {
 		webPreferences: { nodeIntegration: true, webviewTag: true, contextIsolation: false },
 	});
 	settingsWnd.loadFile(path.resolve(__dirname, "settings/index.html"));
-	settingsWnd.once("closed", e => settingsWnd = null);
+	settingsWnd.once("closed", () => settingsWnd = null);
 	remoteMain.enable(settingsWnd.webContents);
 }
 
@@ -203,6 +205,10 @@ export function* selectAppContexts(rsinstance: RsInstance | null, permission: Ap
 		if (permission && !wnd.appConfig.permissions.includes(permission)) { continue; }
 		if (wnd.appFrameId == -1) { continue; }
 		let webcontent = electron.webContents.fromId(wnd.appFrameId);
+		if (!webcontent) {
+			console.log("webcontent empty, this should not be possible");
+			continue;
+		}
 		yield webcontent;
 	}
 }
@@ -228,11 +234,11 @@ class TooltipWindow {
 		wnd.once("ready-to-show", () => {
 			wnd.show();
 		});
-		wnd.webContents.once("dom-ready", e => {
+		wnd.webContents.once("dom-ready", () => {
 			this.loaded = true;
 			this.setTooltip(this.text);
 		});
-		wnd.on("closed", e => {
+		wnd.on("closed", () => {
 			if (this.interval) { clearInterval(this.interval) }
 			tooltipWindow = null;
 		});

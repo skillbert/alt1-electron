@@ -13,7 +13,7 @@ npm i
 # You can then build and debug using that project and IDE
 npm run native
 
-# auto-build typescript/webpack
+# auto-build typescript/webpack (requires nodejs >22.6)
 npm run watch
 
 # Run
