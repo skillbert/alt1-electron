@@ -37,11 +37,19 @@ app.on("browser-window-created", (e, wnd) => {
 const originalCwd = process.cwd();
 process.chdir(__dirname);
 if (!app.requestSingleInstanceLock()) { app.exit(); }
-app.getApplicationInfoForProtocol("alt1")
+
+// protocol scheme
+// getApplicationInfoForProtocol is not defined on linux
+app.getApplicationInfoForProtocol?.(schemestring)
 	.then(info => console.log("current alt1 protocol handler:", info))
-	.catch(e => console.log("current alt1 protocol check failed ", e));
-app.setAsDefaultProtocolClient(schemestring, undefined, process.argv.filter(q => !q.startsWith("--inspect-brk")));
+	.catch(e => console.log("current alt1 protocol check failed ", e.message));
+if (app.setAsDefaultProtocolClient?.(schemestring, undefined, process.argv.filter(q => !q.startsWith("--inspect-brk")))) {
+	console.log(`protocol handler for ${schemestring} registered successfully`);
+} else {
+	console.log(`failed to register handler for ${schemestring}`)
+}
 handleSchemeArgs(process.argv);
+
 settings.loadOrFetch();
 settings.on("changed", () => {
 	for (let admin of selectAdminContexts()) {
@@ -59,9 +67,11 @@ app.on("before-quit", e => {
 app.on("second-instance", (e, argv, cwd) => handleSchemeArgs(argv));
 app.on("window-all-closed", () => {
 	// existance of this listener prevent electron default behavior of closing
-})
+});
 app.once("ready", () => {
-	globalShortcut.register("Alt+1", alt1Pressed);
+	if (!globalShortcut.register("Alt+1", alt1Pressed)) {
+		console.log("failed to register alt+1 hotkey");
+	}
 	drawTray();
 	initIpcApi(ipcMain);
 	initRsInstanceTracking();
@@ -129,7 +139,7 @@ export class ManagedWindow {
 			show: false,
 		});
 		remoteMain.enable(this.window.webContents);
-		this.window.webContents.openDevTools({ mode: "detach" });
+		// this.window.webContents.openDevTools({ mode: "detach" });
 
 		this.nativeWindow = new OSWindow(this.window.getNativeWindowHandle());
 		this.rsClient = rsclient;
